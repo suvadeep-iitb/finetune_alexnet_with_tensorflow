@@ -20,8 +20,8 @@ class ImageDataGenerator(object):
     Requires Tensorflow >= version 1.12rc0
     """
 
-    def __init__(self, txt_file, mode, batch_size, num_classes, shuffle=True,
-                 buffer_size=1000):
+    def __init__(self, txt_file, mode, batch_size, num_classes, preload=False, 
+                 shuffle=True, buffer_size=1000):
         """Create a new ImageDataGenerator.
 
         Recieves a path string to a text file, which consists of many lines,
@@ -67,10 +67,10 @@ class ImageDataGenerator(object):
 
         # distinguish between train/infer. when calling the parsing functions
         if mode == 'training':
-            data = data.map(self._parse_function_train, num_parallel_calls=8)
+            data = data.map(self._parse_function_train, num_parallel_calls=10)
 
         elif mode == 'inference':
-            data = data.map(self._parse_function_inference, num_parallel_calls=8)
+            data = data.map(self._parse_function_inference, num_parallel_calls=10)
 
         else:
             raise ValueError("Invalid mode '%s'." % (mode))
@@ -83,6 +83,22 @@ class ImageDataGenerator(object):
         data = data.batch(batch_size)
 
         self.data = data
+        
+        self.img_loaded = False
+        if preload:
+            self._load_images()
+            self.img_loaded = True
+        print('PRELOAD: '+str(self.img_loaded)+' '+str(preload))
+
+
+
+    def _load_images(self):
+        """Load images into memory."""
+        img_dict = {}
+        for path in img_paths:
+            img_dict[path] = tf.read_file(filename)
+        self.img_dict = img_dict
+
 
     def _read_txt_file(self):
         """Read the content of the text file and store it into lists."""
@@ -112,7 +128,10 @@ class ImageDataGenerator(object):
         one_hot = tf.one_hot(label, self.num_classes)
 
         # load and preprocess the image
-        img_string = tf.read_file(filename)
+        if self.img_loaded:
+            img_string = self.img_dict[filename]
+        else:
+            img_string = tf.read_file(filename)
         img_decoded = tf.image.decode_jpeg(img_string, channels=3)
         img_resized = tf.image.resize_images(img_decoded, [227, 227])
         """
@@ -131,7 +150,10 @@ class ImageDataGenerator(object):
         one_hot = tf.one_hot(label, self.num_classes)
 
         # load and preprocess the image
-        img_string = tf.read_file(filename)
+        if self.img_loaded:
+            img_string = self.img_dict[filename]
+        else:
+            img_string = tf.read_file(filename)
         img_decoded = tf.image.decode_jpeg(img_string, channels=3)
         img_resized = tf.image.resize_images(img_decoded, [227, 227])
         img_centered = tf.subtract(img_resized, IMAGENET_MEAN)

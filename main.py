@@ -163,16 +163,19 @@ def main(_):
                                      mode='training',
                                      batch_size=batch_size,
                                      num_classes=num_classes,
+                                     preload=True,
                                      shuffle=True)
         val_data = ImageDataGenerator(val_paths,
                                       mode='inference',
                                       batch_size=batch_size,
                                       num_classes=num_classes,
+                                      preload=True,
                                       shuffle=False)
         te_data = ImageDataGenerator(test_paths,
                                      mode='inference',
                                      batch_size=batch_size,
                                      num_classes=num_classes,
+                                     preload=True,
                                      shuffle=False)
 
         # create an reinitializable iterator given the dataset structure
