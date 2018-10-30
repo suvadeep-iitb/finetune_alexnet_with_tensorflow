@@ -20,32 +20,32 @@ import tensorflow as tf
 from alexnet import AlexNet
 from datagenerator import ImageDataGenerator
 from datetime import datetime
-from tensorflow.contrib.data import Iterator
+from tensorflow.data import Iterator
 
 """
 Configuration Part.
 """
 
 # Path to the textfiles for the trainings and validation set
-train_file = '/path/to/train.txt'
-val_file = '/path/to/val.txt'
+train_file = 'train.txt'
+val_file = 'valid.txt'
 
 # Learning params
-learning_rate = 0.01
+learning_rate = 0.001
 num_epochs = 10
 batch_size = 128
 
 # Network params
 dropout_rate = 0.5
 num_classes = 2
-train_layers = ['fc8', 'fc7', 'fc6']
+train_layers = ['fc8', 'fc7']
 
 # How often we want to write the tf.summary data to disk
-display_step = 20
+display_step = 1
 
 # Path for tf.summary.FileWriter and to store model checkpoints
-filewriter_path = "/tmp/finetune_alexnet/tensorboard"
-checkpoint_path = "/tmp/finetune_alexnet/checkpoints"
+filewriter_path = "tmp/finetune_alexnet/tensorboard"
+checkpoint_path = "tmp/finetune_alexnet/checkpoints"
 
 """
 Main Part of the finetuning Script.
@@ -67,6 +67,11 @@ with tf.device('/cpu:0'):
                                   batch_size=batch_size,
                                   num_classes=num_classes,
                                   shuffle=False)
+    te_data = ImageDataGenerator(test_file,
+                                 mode='inference',
+                                 batch_size=batch_size,
+                                 num_classes=num_classes,
+                                 shuffle=False)
 
     # create an reinitializable iterator given the dataset structure
     iterator = Iterator.from_structure(tr_data.data.output_types,
@@ -76,6 +81,7 @@ with tf.device('/cpu:0'):
 # Ops for initializing the two different iterators
 training_init_op = iterator.make_initializer(tr_data.data)
 validation_init_op = iterator.make_initializer(val_data.data)
+test_init_op = iterator.make_initializer(te_data.data)
 
 # TF placeholder for graph input and output
 x = tf.placeholder(tf.float32, [batch_size, 227, 227, 3])
@@ -107,12 +113,12 @@ with tf.name_scope("train"):
     train_op = optimizer.apply_gradients(grads_and_vars=gradients)
 
 # Add gradients to summary
-for gradient, var in gradients:
-    tf.summary.histogram(var.name + '/gradient', gradient)
+#for gradient, var in gradients:
+#    tf.summary.histogram(var.name + '/gradient', gradient)
 
 # Add the variables we train to the summary
-for var in var_list:
-    tf.summary.histogram(var.name, var)
+#for var in var_list:
+#    tf.summary.histogram(var.name, var)
 
 # Add the loss to summary
 tf.summary.scalar('cross_entropy', loss)
