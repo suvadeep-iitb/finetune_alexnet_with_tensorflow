@@ -7,7 +7,7 @@
 import tensorflow as tf
 import numpy as np
 
-from tensorflow.contrib.data import Dataset
+from tensorflow.data import Dataset
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework.ops import convert_to_tensor
 
@@ -67,12 +67,10 @@ class ImageDataGenerator(object):
 
         # distinguish between train/infer. when calling the parsing functions
         if mode == 'training':
-            data = data.map(self._parse_function_train, num_threads=8,
-                      output_buffer_size=100*batch_size)
+            data = data.map(self._parse_function_train, num_parallel_calls=8)
 
         elif mode == 'inference':
-            data = data.map(self._parse_function_inference, num_threads=8,
-                      output_buffer_size=100*batch_size)
+            data = data.map(self._parse_function_inference, num_parallel_calls=8)
 
         else:
             raise ValueError("Invalid mode '%s'." % (mode))
@@ -93,7 +91,7 @@ class ImageDataGenerator(object):
         with open(self.txt_file, 'r') as f:
             lines = f.readlines()
             for line in lines:
-                items = line.split(' ')
+                items = line.split()
                 self.img_paths.append(items[0])
                 self.labels.append(int(items[1]))
 
@@ -115,7 +113,7 @@ class ImageDataGenerator(object):
 
         # load and preprocess the image
         img_string = tf.read_file(filename)
-        img_decoded = tf.image.decode_png(img_string, channels=3)
+        img_decoded = tf.image.decode_jpeg(img_string, channels=3)
         img_resized = tf.image.resize_images(img_decoded, [227, 227])
         """
         Dataaugmentation comes here.
@@ -134,7 +132,7 @@ class ImageDataGenerator(object):
 
         # load and preprocess the image
         img_string = tf.read_file(filename)
-        img_decoded = tf.image.decode_png(img_string, channels=3)
+        img_decoded = tf.image.decode_jpeg(img_string, channels=3)
         img_resized = tf.image.resize_images(img_decoded, [227, 227])
         img_centered = tf.subtract(img_resized, IMAGENET_MEAN)
 
