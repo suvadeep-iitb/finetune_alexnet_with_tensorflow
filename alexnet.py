@@ -28,7 +28,7 @@ import numpy as np
 class AlexNet(object):
     """Implementation of the AlexNet."""
 
-    def __init__(self, x, keep_prob, num_classes, skip_layer,
+    def __init__(self, x, keep_prob, num_classes, emb_dim, skip_layer,
                  weights_path='DEFAULT'):
         """Create the graph of the AlexNet model.
 
@@ -45,6 +45,7 @@ class AlexNet(object):
         self.X = x
         self.NUM_CLASSES = num_classes
         self.KEEP_PROB = keep_prob
+        self.EMB_DIM = emb_dim
         self.SKIP_LAYER = skip_layer
 
         if weights_path == 'DEFAULT':
@@ -83,11 +84,11 @@ class AlexNet(object):
         dropout6 = dropout(fc6, self.KEEP_PROB)
 
         # 7th Layer: FC (w ReLu) -> Dropout
-        fc7 = fc(dropout6, 4096, 4096, name='fc7')
+        fc7 = fc(dropout6, 4096, self.EMB_DIM, name='fc7')
         dropout7 = dropout(fc7, self.KEEP_PROB)
 
         # 8th Layer: FC and return unscaled activations
-        self.fc8 = fc(dropout7, 4096, self.NUM_CLASSES, relu=False, name='fc8')
+        self.fc8 = fc(dropout7, self.EMB_DIM, self.NUM_CLASSES, relu=False, name='fc8')
 
     def load_initial_weights(self, session):
         """Load weights from file into network.
