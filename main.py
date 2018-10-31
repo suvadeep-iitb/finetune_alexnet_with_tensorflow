@@ -27,6 +27,8 @@ flags.DEFINE_integer("max_threads", 0,
                      "Maximum number of threads/cores to be used during training")
 flags.DEFINE_integer("display_step", 1,
                      "Step of percision on train, validation and test will be computed and printed")
+flags.DEFINE_bool("preload_data", False,
+                  "Predload the data into memory before start training")
 
 flags.DEFINE_integer("num_classes", 1000,
                      "The number of classes, the dimension of the last layer")
@@ -52,7 +54,7 @@ FLAGS=flags.FLAGS
 
 
 class ResultStruct:
-    def ResultStruct(self):
+    def __init__(self):
         self.acc = 0.0
         self.acc_split_top10 = 0.0
         self.acc_split_top10_100 = 0.0
@@ -61,12 +63,12 @@ class ResultStruct:
         self.acc_caffe = 0.0
 
     def add(self, acc_array):
-        self.acc = acc_array[0]
-        self.acc_split_top10 = acc_array[1]
-        self.acc_split_top10_100 = acc_array[2]
-        self.acc_split_top100_1000 = acc_array[3]
-        self.acc_split_top1000_10000 = acc_array[4]
-        self.acc_caffe = acc_array[5]
+        self.acc += acc_array[0]
+        self.acc_split_top10 += acc_array[1]
+        self.acc_split_top10_100 += acc_array[2]
+        self.acc_split_top100_1000 += acc_array[3]
+        self.acc_split_top1000_10000 += acc_array[4]
+        self.acc_caffe += acc_array[5]
 
     '''
     def add(self, res):
@@ -108,8 +110,9 @@ def get_acc_split_weights(train_paths, num_classes, caffe_class_ids):
 
     class_buckets = [0, 10, 100, 1000, 10000]
     num_buckets = len(class_buckets)-1
-    acc_split_weights = np.vstack([np.ones((1, num_classes)), np.zeros((num_buckets+1, num_classes))])
-    for i in range(len(class_buckets)-1):
+    acc_split_weights = np.vstack([np.ones((1, num_classes), dtype=np.float32), \
+                                   np.zeros((num_buckets+1, num_classes), dtype=np.float32)])
+    for i in range(num_buckets):
         s_idx = class_buckets[i]
         e_idx = min(class_buckets[i+1], num_classes)
         if s_idx > num_classes:
@@ -150,6 +153,7 @@ def main(_):
     filewriter_path = FLAGS.filewriter_path
     display_step = FLAGS.display_step
     max_threads = FLAGS.max_threads
+    preload_data = FLAGS.preload_data
 
     # Create parent path if it doesn't exist
     if not os.path.isdir(checkpoint_path):
@@ -163,19 +167,19 @@ def main(_):
                                      mode='training',
                                      batch_size=batch_size,
                                      num_classes=num_classes,
-                                     preload=True,
+                                     preload=preload_data,
                                      shuffle=True)
         val_data = ImageDataGenerator(val_paths,
                                       mode='inference',
                                       batch_size=batch_size,
                                       num_classes=num_classes,
-                                      preload=True,
+                                      preload=preload_data,
                                       shuffle=False)
         te_data = ImageDataGenerator(test_paths,
                                      mode='inference',
                                      batch_size=batch_size,
                                      num_classes=num_classes,
-                                     preload=True,
+                                     preload=preload_data,
                                      shuffle=False)
 
         # create an reinitializable iterator given the dataset structure
@@ -236,7 +240,7 @@ def main(_):
         gradients = list(zip(gradients, var_list))
 
         # Create optimizer and apply gradient descent to the trainable variables
-        optimizer = tf.train.AdamOptimizer(learning_rate)
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate)
         train_op = optimizer.apply_gradients(grads_and_vars=gradients)
  
     # Add gradients to summary
@@ -265,6 +269,11 @@ def main(_):
         top5_correct_pred =  tf.cast(tf.nn.in_top_k(score, tf.argmax(y, 1), 5), tf.float32)
         top5_correct_pred = tf.reshape(top5_correct_pred, [-1, 1])
         top5_accuracies = tf.squeeze(tf.matmul(label_splits, top5_correct_pred))/batch_size
+        
+        correct_pred = tf.equal(tf.argmax(score, 1), tf.argmax(y, 1))
+        correct_pred = tf.equal(tf.argmax(score, 1), tf.argmax(y, 1))
+        accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+        
 
     # Merge all summaries together
     merged_summary = tf.summary.merge_all()
@@ -339,7 +348,8 @@ def main(_):
             # Test the model on the sampled train set
             start_time = time.time()
             sess.run(training_init_op)
-            tr_top1 = tr_top5 = ResultStruct()
+            tr_top1 = ResultStruct()
+            tr_top5 = ResultStruct()
             # Evaluate on a for a smaller number of batches of trainset
             num_batches = int(tr_batches_per_epoch/4);
             for _ in range(num_batches):
@@ -360,26 +370,29 @@ def main(_):
             # Test the model on the entire validation set
             start_time = time.time()
             sess.run(validation_init_op)
-            val_top1 = val_top5 = ResultStruct()
+            val_top1 = ResultStruct()
+            val_top5 = ResultStruct()
             for _ in range(val_batches_per_epoch):
 
                 img_batch, label_batch = sess.run(next_batch)
                 temp_top1, temp_top5 = sess.run((top1_accuracies, top5_accuracies), 
                                                  feed_dict={x: img_batch,
                                                             y: label_batch,
-                                                            kp: 1.0});
+                                                            kp: 1.0})
                 val_top1.add(temp_top1)
                 val_top5.add(temp_top5)
             val_top1.scaler_div(val_batches_per_epoch)
             val_top5.scaler_div(val_batches_per_epoch)
             print('Epoch: ' + str(epoch+1) + '\tVal   Top 1 Acc: ' + str(val_top1))
             print('Epoch: ' + str(epoch+1) + '\tVal   Top 5 Acc: ' + str(val_top5))
+
             val_pred_time = time.time() - start_time
 
             # Test the model on the entire test set
             start_time = time.time()
             sess.run(testing_init_op)
-            te_top1 = te_top5 = ResultStruct()
+            te_top1 = ResultStruct()
+            te_top5 = ResultStruct()
             for _ in range(te_batches_per_epoch):
 
                 img_batch, label_batch = sess.run(next_batch)
