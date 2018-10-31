@@ -27,8 +27,6 @@ flags.DEFINE_integer("max_threads", 0,
                      "Maximum number of threads/cores to be used during training")
 flags.DEFINE_integer("display_step", 1,
                      "Step of percision on train, validation and test will be computed and printed")
-flags.DEFINE_bool("preload_data", False,
-                  "Predload the data into memory before start training")
 
 flags.DEFINE_integer("num_classes", 1000,
                      "The number of classes, the dimension of the last layer")
@@ -69,16 +67,6 @@ class ResultStruct:
         self.acc_split_top100_1000 += acc_array[3]
         self.acc_split_top1000_10000 += acc_array[4]
         self.acc_caffe += acc_array[5]
-
-    '''
-    def add(self, res):
-        self.acc += res.acc
-        self.acc_split_top10 += res.acc_split_top10
-        self.acc_split_top10_100 += res.acc_split_top10_100
-        self.acc_split_top100_1000 += res.acc_split_top100_1000
-        self.acc_split_top1000_10000 += res.acc_split_top1000_10000
-        self.acc_caffe += res.acc_caffe
-    '''
 
     def scaler_div(self, div):
         self.div = 1.0 * div
@@ -153,7 +141,6 @@ def main(_):
     filewriter_path = FLAGS.filewriter_path
     display_step = FLAGS.display_step
     max_threads = FLAGS.max_threads
-    preload_data = FLAGS.preload_data
 
     # Create parent path if it doesn't exist
     if not os.path.isdir(checkpoint_path):
@@ -161,44 +148,13 @@ def main(_):
     if not os.path.isdir(filewriter_path):
         os.mkdir(filewriter_path)
 
-    # Place data loading and preprocessing on the cpu
-    with tf.device('/cpu:0'):
-        tr_data = ImageDataGenerator(train_paths,
-                                     mode='training',
-                                     batch_size=batch_size,
-                                     num_classes=num_classes,
-                                     preload=preload_data,
-                                     shuffle=True)
-        val_data = ImageDataGenerator(val_paths,
-                                      mode='inference',
-                                      batch_size=batch_size,
-                                      num_classes=num_classes,
-                                      preload=preload_data,
-                                      shuffle=False)
-        te_data = ImageDataGenerator(test_paths,
-                                     mode='inference',
-                                     batch_size=batch_size,
-                                     num_classes=num_classes,
-                                     preload=preload_data,
-                                     shuffle=False)
-
-        # create an reinitializable iterator given the dataset structure
-        iterator = Iterator.from_structure(tr_data.data.output_types,
-                                           tr_data.data.output_shapes)
-        next_batch = iterator.get_next()
-
-    # Ops for initializing the two different iterators
-    training_init_op = iterator.make_initializer(tr_data.data)
-    validation_init_op = iterator.make_initializer(val_data.data)
-    testing_init_op = iterator.make_initializer(te_data.data)
-
     # TF placeholder for graph input and output
-    x = tf.placeholder(tf.float32, [batch_size, 227, 227, 3])
+    x = tf.placeholder(tf.float32, [batch_size, 6*6*256])
     y = tf.placeholder(tf.float32, [batch_size, num_classes])
     kp = tf.placeholder(tf.float32)
 
     # Initialize model
-    layer_names = ['conv1', 'norm1', 'pool1', 'conv2', 'norm2', 'pool2', 'conv3', 'conv4', 'conv5', 'pool5', 'fc6', 'fc7', 'fc8']
+    layer_names = ['fc6', 'fc7', 'fc8']
     train_layers = layer_names[-FLAGS.num_train_layers:]
     model = AlexNet(x, kp, num_classes, emb_dim, train_layers)
 
@@ -269,11 +225,6 @@ def main(_):
         top5_correct_pred =  tf.cast(tf.nn.in_top_k(score, tf.argmax(y, 1), 5), tf.float32)
         top5_correct_pred = tf.reshape(top5_correct_pred, [-1, 1])
         top5_accuracies = tf.squeeze(tf.matmul(label_splits, top5_correct_pred))/batch_size
-        
-        correct_pred = tf.equal(tf.argmax(score, 1), tf.argmax(y, 1))
-        correct_pred = tf.equal(tf.argmax(score, 1), tf.argmax(y, 1))
-        accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-        
 
     # Merge all summaries together
     merged_summary = tf.summary.merge_all()
@@ -283,6 +234,31 @@ def main(_):
 
     # Initialize an saver for store model checkpoints
     saver = tf.train.Saver()
+
+    # Place data loading and preprocessing on the cpu
+    with tf.device('/cpu:0'):
+        tr_data = ImageDataGenerator(train_paths,
+                                     batch_size=batch_size,
+                                     num_classes=num_classes,
+                                     shuffle=True)
+        val_data = ImageDataGenerator(val_paths,
+                                      batch_size=batch_size,
+                                      num_classes=num_classes,
+                                      shuffle=False)
+        te_data = ImageDataGenerator(test_paths,
+                                     batch_size=batch_size,
+                                     num_classes=num_classes,
+                                     shuffle=False)
+
+        # create an reinitializable iterator given the dataset structure
+        iterator = Iterator.from_structure(tr_data.data.output_types,
+                                           tr_data.data.output_shapes)
+        next_batch = iterator.get_next()
+
+    # Ops for initializing the two different iterators
+    training_init_op = iterator.make_initializer(tr_data.data)
+    validation_init_op = iterator.make_initializer(val_data.data)
+    testing_init_op = iterator.make_initializer(te_data.data)
 
     # Get the number of training/validation steps per epoch
     tr_batches_per_epoch = int(np.floor(tr_data.data_size/batch_size))
@@ -307,13 +283,16 @@ def main(_):
         print("{} Open Tensorboard at --logdir {}".format(datetime.now(),
                                                       filewriter_path))
 
+
         # Loop over number of epochs
         prev_top5_acc = 0
         counter = 0
         for epoch in range(num_epochs):
 
             # Initialize iterator with the training dataset
+            start_time = time.time()
             sess.run(training_init_op)
+            print('Train data init time: %.2f' % (time.time() - start_time))
 
             cost = 0.0
             load_time = 0
@@ -346,11 +325,13 @@ def main(_):
                     (epoch+1, cost/tr_batches_per_epoch, elapsed_time, load_time, train_time))
 
             # Test the model on the sampled train set
-            start_time = time.time()
-            sess.run(training_init_op)
             tr_top1 = ResultStruct()
             tr_top5 = ResultStruct()
             # Evaluate on a for a smaller number of batches of trainset
+            start_time = time.time()
+            sess.run(training_init_op)
+            print('Train (testing) data init time: %.2f' % (time.time() - start_time))
+            start_time = time.time()
             num_batches = int(tr_batches_per_epoch/4);
             for _ in range(num_batches):
 
@@ -368,10 +349,12 @@ def main(_):
             tr_pred_time = time.time() - start_time
 
             # Test the model on the entire validation set
-            start_time = time.time()
-            sess.run(validation_init_op)
             val_top1 = ResultStruct()
             val_top5 = ResultStruct()
+            start_time = time.time()
+            sess.run(validation_init_op)
+            print('Validation data init time: %.2f' % (time.time() - start_time))
+            start_time = time.time()
             for _ in range(val_batches_per_epoch):
 
                 img_batch, label_batch = sess.run(next_batch)
@@ -389,10 +372,12 @@ def main(_):
             val_pred_time = time.time() - start_time
 
             # Test the model on the entire test set
-            start_time = time.time()
-            sess.run(testing_init_op)
             te_top1 = ResultStruct()
             te_top5 = ResultStruct()
+            start_time = time.time()
+            sess.run(testing_init_op)
+            print('Test data init time: %.2f' % (time.time() - start_time))
+            start_time = time.time()
             for _ in range(te_batches_per_epoch):
 
                 img_batch, label_batch = sess.run(next_batch)
@@ -416,7 +401,7 @@ def main(_):
             if cur_top5_acc - prev_top5_acc > 0.003:
                 counter = 0
                 prev_top5_acc = cur_top5_acc
-            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 5):
+            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 8):
                 break
             else:
                 counter += 1
