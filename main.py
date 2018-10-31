@@ -196,7 +196,7 @@ def main(_):
         gradients = list(zip(gradients, var_list))
 
         # Create optimizer and apply gradient descent to the trainable variables
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+        optimizer = tf.train.AdamOptimizer(learning_rate)
         train_op = optimizer.apply_gradients(grads_and_vars=gradients)
  
     # Add gradients to summary
