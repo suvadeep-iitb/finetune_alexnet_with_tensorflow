@@ -143,10 +143,12 @@ def main(_):
     max_threads = FLAGS.max_threads
 
     # Create parent path if it doesn't exist
+    '''
     if not os.path.isdir(checkpoint_path):
         os.mkdir(checkpoint_path)
     if not os.path.isdir(filewriter_path):
         os.mkdir(filewriter_path)
+    '''
 
     # TF placeholder for graph input and output
     x = tf.placeholder(tf.float32, [batch_size, 6*6*256])
@@ -230,7 +232,7 @@ def main(_):
     merged_summary = tf.summary.merge_all()
 
     # Initialize the FileWriter
-    writer = tf.summary.FileWriter(filewriter_path)
+    #writer = tf.summary.FileWriter(filewriter_path)
 
     # Initialize an saver for store model checkpoints
     saver = tf.train.Saver()
@@ -274,25 +276,30 @@ def main(_):
         sess.run(tf.global_variables_initializer())
 
         # Add the model graph to TensorBoard
-        writer.add_graph(sess.graph)
+        #writer.add_graph(sess.graph)
 
         # Load the pretrained weights into the non-trainable layer
         model.load_initial_weights(sess)
 
-        print("{} Start training...".format(datetime.now()))
-        print("{} Open Tensorboard at --logdir {}".format(datetime.now(),
-                                                      filewriter_path))
+        log_buff = ''
+        log_buff += "{} Start training...".format(datetime.now())+'\n'
+        #print("{} Open Tensorboard at --logdir {}".format(datetime.now(),
+        #                                              filewriter_path))
 
+
+        print(log_buff)
+        log_buff = ''
 
         # Loop over number of epochs
         prev_top5_acc = 0
         counter = 0
         for epoch in range(num_epochs):
 
+            log_buff += "{} Epoch: {}".format(datetime.now(), epoch)+'\n'
             # Initialize iterator with the training dataset
             start_time = time.time()
             sess.run(training_init_op)
-            print('Train data init time: %.2f' % (time.time() - start_time))
+            log_buff += 'Train data init time: %.2f' % (time.time() - start_time)+'\n'
 
             cost = 0.0
             load_time = 0
@@ -313,16 +320,18 @@ def main(_):
                 train_time += time.time() - start_time
 
                 # Generate summary with the current batch of data and write to file
+                '''
                 if step % display_step == 0:
                     s = sess.run(merged_summary, feed_dict={x: img_batch,
                                                             y: label_batch,
                                                             kp: 1.0})
 
                     writer.add_summary(s, epoch*tr_batches_per_epoch + step)
+                '''
 
             elapsed_time = load_time + train_time
-            print('Epoch: %d\tCost: %.6f\tElapsed Time: %.2f (%.2f / %.2f)' %
-                    (epoch+1, cost/tr_batches_per_epoch, elapsed_time, load_time, train_time))
+            log_buff += 'Epoch: %d\tCost: %.6f\tElapsed Time: %.2f (%.2f / %.2f)' % \
+                    (epoch+1, cost/tr_batches_per_epoch, elapsed_time, load_time, train_time) + '\n'
 
             # Test the model on the sampled train set
             tr_top1 = ResultStruct()
@@ -330,7 +339,7 @@ def main(_):
             # Evaluate on a for a smaller number of batches of trainset
             start_time = time.time()
             sess.run(training_init_op)
-            print('Train (testing) data init time: %.2f' % (time.time() - start_time))
+            log_buff += 'Train (testing) data init time: %.2f' % (time.time() - start_time) + '\n'
             start_time = time.time()
             num_batches = int(tr_batches_per_epoch/4);
             for _ in range(num_batches):
@@ -344,8 +353,8 @@ def main(_):
                 tr_top5.add(temp_top5)
             tr_top1.scaler_div(num_batches)
             tr_top5.scaler_div(num_batches)
-            print('Epoch: ' + str(epoch+1) + '\tTrain Top 1 Acc: ' + str(tr_top1))
-            print('Epoch: ' + str(epoch+1) + '\tTrain Top 5 Acc: ' + str(tr_top5))
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 1 Acc: ' + str(tr_top1) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 5 Acc: ' + str(tr_top5) + '\n'
             tr_pred_time = time.time() - start_time
 
             # Test the model on the entire validation set
@@ -353,7 +362,7 @@ def main(_):
             val_top5 = ResultStruct()
             start_time = time.time()
             sess.run(validation_init_op)
-            print('Validation data init time: %.2f' % (time.time() - start_time))
+            log_buff += 'Validation data init time: %.2f' % (time.time() - start_time) + '\n'
             start_time = time.time()
             for _ in range(val_batches_per_epoch):
 
@@ -366,8 +375,8 @@ def main(_):
                 val_top5.add(temp_top5)
             val_top1.scaler_div(val_batches_per_epoch)
             val_top5.scaler_div(val_batches_per_epoch)
-            print('Epoch: ' + str(epoch+1) + '\tVal   Top 1 Acc: ' + str(val_top1))
-            print('Epoch: ' + str(epoch+1) + '\tVal   Top 5 Acc: ' + str(val_top5))
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 1 Acc: ' + str(val_top1) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 5 Acc: ' + str(val_top5) + '\n'
 
             val_pred_time = time.time() - start_time
 
@@ -376,7 +385,7 @@ def main(_):
             te_top5 = ResultStruct()
             start_time = time.time()
             sess.run(testing_init_op)
-            print('Test data init time: %.2f' % (time.time() - start_time))
+            log_buff += 'Test data init time: %.2f' % (time.time() - start_time) + '\n'
             start_time = time.time()
             for _ in range(te_batches_per_epoch):
 
@@ -389,24 +398,25 @@ def main(_):
                 te_top5.add(temp_top5)
             te_top1.scaler_div(te_batches_per_epoch)
             te_top5.scaler_div(te_batches_per_epoch)
-            print('Epoch: ' + str(epoch+1) + '\tTest  Top 1 Acc: ' + str(te_top1))
-            print('Epoch: ' + str(epoch+1) + '\tTest  Top 5 Acc: ' + str(te_top5))
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 1 Acc: ' + str(te_top1) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 5 Acc: ' + str(te_top5) + '\n'
             te_pred_time = time.time() - start_time
 
             elapsed_time = tr_pred_time + val_pred_time + te_pred_time
-            print('Epoch %d Prediction: \tElapsed Time: %.2f (%.2f / %.2f / %.2f)'
-                    % (epoch+1, elapsed_time, tr_pred_time, val_pred_time, te_pred_time))
+            log_buff += 'Epoch %d Prediction: \tElapsed Time: %.2f (%.2f / %.2f / %.2f)' \
+                    % (epoch+1, elapsed_time, tr_pred_time, val_pred_time, te_pred_time) + '\n'
 
             cur_top5_acc = val_top5.acc
             if cur_top5_acc - prev_top5_acc > 0.003:
                 counter = 0
                 prev_top5_acc = cur_top5_acc
-            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 8):
+            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 15):
                 break
             else:
                 counter += 1
 
             # save checkpoint of the model
+            '''
             print("{} Saving checkpoint of model...".format(datetime.now()))
             checkpoint_name = os.path.join(checkpoint_path,
                                            'model_epoch'+str(epoch+1)+'.ckpt')
@@ -414,6 +424,12 @@ def main(_):
 
             print("{} Model checkpoint saved at {}".format(datetime.now(),
                                                            checkpoint_name))
+            '''
+           
+            print(log_buff)
+            log_buff = ''
+
+        print(log_buff)
 
 
 if __name__ == "__main__":
