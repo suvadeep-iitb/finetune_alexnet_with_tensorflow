@@ -49,11 +49,8 @@ class ImageDataGenerator(object):
         self._load_from_pickle_file()
 
         # number of samples in the dataset
-        self.data_size = len(self.labels)
+        self.data_size = self.labels.get_shape().as_list()[0]
  
-        # convert lists to TF tensor
-        self._convert_to_tensors()
-
         # convert labels to one_hot representation
         self.labels = tf.one_hot(self.labels, num_classes)
      
@@ -71,17 +68,17 @@ class ImageDataGenerator(object):
         self.data = data
 
 
-    def _convert_to_tensors(self):
-        """Convert list to tensors"""
-        self.label_list = self.labels
-        self.labels = convert_to_tensor(self.labels, dtype=dtypes.int32)
-        self.img_contents = tf.stack(self.img_contents, axis=0)
-
-
     def _load_from_pickle_file(self):
         self.img_contents, self.labels = pickle.load(open(self.pickle_file, 'rb'))
-        for i in range(len(self.img_contents)):
-            self.img_contents[i] = convert_to_tensor(self.img_contents[i])
+        if type(self.img_contents) is list:
+            for i in range(len(self.img_contents)):
+                self.img_contents[i] = convert_to_tensor(self.img_contents[i], dtype=dtypes.float32)
+            self.img_contents = tf.concat(self.img_contents, axis=0)
+        else:
+            self.img_contents = convert_to_tensor(self.img_contents, dtype=dtypes.float32)
+        self.label_list = self.labels
+        self.labels = convert_to_tensor(self.labels, dtype=dtypes.int32)
+        print(str(self.img_contents.get_shape().as_list()))
 
 
     def _load_images(self):
