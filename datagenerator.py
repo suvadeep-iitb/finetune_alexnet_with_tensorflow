@@ -6,6 +6,8 @@
 
 import tensorflow as tf
 import numpy as np
+import pickle
+from collections import Counter
 
 from tensorflow.data import Dataset
 from tensorflow.python.framework import dtypes
@@ -18,7 +20,7 @@ class ImageDataGenerator(object):
     Requires Tensorflow >= version 1.12rc0
     """
 
-    def __init__(self, txt_file, batch_size, num_classes, shuffle=True):
+    def __init__(self, pickle_file, batch_size, num_classes, shuffle=True):
         """Create a new ImageDataGenerator.
 
         Recieves a path string to a text file, which consists of many lines,
@@ -40,18 +42,15 @@ class ImageDataGenerator(object):
             ValueError: If an invalid mode is passed.
 
         """
-        self.txt_file = txt_file
+        self.pickle_file = pickle_file
         self.num_classes = num_classes
 
-        # retrieve the data from the text file
-        self._read_txt_file()
+        # load the data from the pickle file
+        self._load_from_pickle_file()
 
         # number of samples in the dataset
         self.data_size = len(self.labels)
  
-        # if preload is True, load the images
-        self._load_images()
-
         # convert lists to TF tensor
         self._convert_to_tensors()
 
@@ -74,9 +73,15 @@ class ImageDataGenerator(object):
 
     def _convert_to_tensors(self):
         """Convert list to tensors"""
-        self.img_paths = convert_to_tensor(self.img_paths, dtype=dtypes.string)
+        self.label_list = self.labels
         self.labels = convert_to_tensor(self.labels, dtype=dtypes.int32)
         self.img_contents = tf.stack(self.img_contents, axis=0)
+
+
+    def _load_from_pickle_file(self):
+        self.img_contents, self.labels = pickle.load(open(self.pickle_file, 'rb'))
+        for i in range(len(self.img_contents)):
+            self.img_contents[i] = convert_to_tensor(self.img_contents[i])
 
 
     def _load_images(self):
@@ -98,4 +103,33 @@ class ImageDataGenerator(object):
                 items = line.split()
                 self.img_paths.append(items[0])
                 self.labels.append(int(items[1]))
+
+    def get_acc_split_weights(self, caffe_class_ids):
+        class_counter = Counter(self.label_list)
+        class_ids = np.array(list(class_counter.keys()))
+        class_freqs = np.array(list(class_counter.values()))
+        sorted_idx = np.argsort(-class_freqs)
+        sorted_ids = class_ids[sorted_idx]
+
+        class_buckets = [0, 125, 250, 500, 1000]
+        num_buckets = len(class_buckets)-1
+        acc_split_weights = np.vstack([np.ones((1, self.num_classes), dtype=np.float32), \
+                                   np.zeros((num_buckets+1, self.num_classes), dtype=np.float32)])
+        for i in range(num_buckets):
+            s_idx = class_buckets[i]
+            e_idx = min(class_buckets[i+1], self.num_classes)
+            if s_idx > self.num_classes:
+                break
+            cur_bucket = set(sorted_ids[s_idx:e_idx])
+            for l in range(self.num_classes):
+                if l in cur_bucket:
+                    acc_split_weights[i+1, l] = 1.0
+
+        caffe_class_ids = set(caffe_class_ids)
+        for l in range(self.num_classes):
+            if l in caffe_class_ids:
+                acc_split_weights[num_buckets+1, l] = 1.0
+
+        return acc_split_weights
+
 

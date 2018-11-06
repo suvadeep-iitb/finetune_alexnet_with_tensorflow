@@ -88,35 +88,6 @@ class ResultStruct:
         return rep_str
 
 
-def get_acc_split_weights(train_paths, num_classes, caffe_class_ids):
-    lines = open(train_paths).readlines()
-    class_counter = Counter([int(l.split()[1]) for l in lines])
-    class_ids = np.array(list(class_counter.keys()))
-    class_freqs = np.array(list(class_counter.values()))
-    sorted_idx = np.argsort(-class_freqs)
-    sorted_ids = class_ids[sorted_idx]
-
-    class_buckets = [0, 10, 100, 1000, 10000]
-    num_buckets = len(class_buckets)-1
-    acc_split_weights = np.vstack([np.ones((1, num_classes), dtype=np.float32), \
-                                   np.zeros((num_buckets+1, num_classes), dtype=np.float32)])
-    for i in range(num_buckets):
-        s_idx = class_buckets[i]
-        e_idx = min(class_buckets[i+1], num_classes)
-        if s_idx > num_classes:
-            break
-        cur_bucket = set(sorted_ids[s_idx:e_idx])
-        for l in range(num_classes):
-            if l in cur_bucket:
-                acc_split_weights[i+1, l] = 1.0
-
-    caffe_class_ids = set(caffe_class_ids)
-    for l in range(num_classes):
-        if l in caffe_class_ids:
-            acc_split_weights[num_buckets+1, l] = 1.0
-
-    return acc_split_weights
-
 
 def main(_):
     if not FLAGS.train_paths:
@@ -212,31 +183,6 @@ def main(_):
     # Add the loss to summary
     tf.summary.scalar('train_loss', loss)
 
-    # Ops for evaluation
-    acc_split_weights = get_acc_split_weights(FLAGS.train_paths, num_classes, caffe_class_ids)
-    acc_split_weights = tf.convert_to_tensor(acc_split_weights, tf.float32)
-    with tf.name_scope('accuracy'):
-        label_splits = tf.matmul(acc_split_weights, tf.transpose(y))
-
-        # ops for top 1 accuracies and their splitting
-        top1_correct_pred =  tf.cast(tf.nn.in_top_k(score, tf.argmax(y, 1), 1), tf.float32)
-        top1_correct_pred = tf.reshape(top1_correct_pred, [-1, 1])
-        top1_accuracies = tf.squeeze(tf.matmul(label_splits, top1_correct_pred))/batch_size
-
-        # ops for top 1 accuracies and their splitting
-        top5_correct_pred =  tf.cast(tf.nn.in_top_k(score, tf.argmax(y, 1), 5), tf.float32)
-        top5_correct_pred = tf.reshape(top5_correct_pred, [-1, 1])
-        top5_accuracies = tf.squeeze(tf.matmul(label_splits, top5_correct_pred))/batch_size
-
-    # Merge all summaries together
-    merged_summary = tf.summary.merge_all()
-
-    # Initialize the FileWriter
-    #writer = tf.summary.FileWriter(filewriter_path)
-
-    # Initialize an saver for store model checkpoints
-    saver = tf.train.Saver()
-
     # Place data loading and preprocessing on the cpu
     with tf.device('/cpu:0'):
         tr_data = ImageDataGenerator(train_paths,
@@ -266,6 +212,32 @@ def main(_):
     tr_batches_per_epoch = int(np.floor(tr_data.data_size/batch_size))
     val_batches_per_epoch = int(np.floor(val_data.data_size / batch_size))
     te_batches_per_epoch = int(np.floor(te_data.data_size / batch_size))
+
+    # Ops for evaluation
+    acc_split_weights = tr_data.get_acc_split_weights(caffe_class_ids)
+    acc_split_weights = tf.convert_to_tensor(acc_split_weights, tf.float32)
+    with tf.name_scope('accuracy'):
+        label_splits = tf.matmul(acc_split_weights, tf.transpose(y))
+
+        # ops for top 1 accuracies and their splitting
+        top1_correct_pred =  tf.cast(tf.nn.in_top_k(score, tf.argmax(y, 1), 1), tf.float32)
+        top1_correct_pred = tf.reshape(top1_correct_pred, [-1, 1])
+        top1_accuracies = tf.squeeze(tf.matmul(label_splits, top1_correct_pred))/batch_size
+
+        # ops for top 1 accuracies and their splitting
+        top5_correct_pred =  tf.cast(tf.nn.in_top_k(score, tf.argmax(y, 1), 5), tf.float32)
+        top5_correct_pred = tf.reshape(top5_correct_pred, [-1, 1])
+        top5_accuracies = tf.squeeze(tf.matmul(label_splits, top5_correct_pred))/batch_size
+
+    # Merge all summaries together
+    merged_summary = tf.summary.merge_all()
+
+    # Initialize the FileWriter
+    #writer = tf.summary.FileWriter(filewriter_path)
+
+    # Initialize an saver for store model checkpoints
+    saver = tf.train.Saver()
+
 
     # Start Tensorflow session
     sess_conf = tf.ConfigProto(intra_op_parallelism_threads=max_threads, 
