@@ -78,7 +78,6 @@ class ImageDataGenerator(object):
             self.img_contents = convert_to_tensor(self.img_contents, dtype=dtypes.float32)
         self.label_list = self.labels
         self.labels = convert_to_tensor(self.labels, dtype=dtypes.int32)
-        print(str(self.img_contents.get_shape().as_list()))
 
 
     def _load_images(self):

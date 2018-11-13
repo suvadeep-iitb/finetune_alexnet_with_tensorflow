@@ -152,13 +152,11 @@ def main(_):
                                                            name='logistic_loss')
         elif loss_func == 'mse':
             loss = tf.losses.mean_squared_error(labels=y,
-                                                predictions=score,
-                                                name='mse_loss')
+                                                predictions=score)
         elif loss_func == 'l2hinge':
             loss = tf.losses.hinge_loss(labels=y,
                                         logits=score,
-                                        reduction=tf.losses.Reduction.NONE,
-                                        name='l2hinge_loss')
+                                        reduction=tf.losses.Reduction.NONE)
             loss = tf.square(loss)
         loss = tf.reduce_mean(loss)
 
@@ -382,7 +380,7 @@ def main(_):
             if cur_top5_acc - prev_top5_acc > 0.003:
                 counter = 0
                 prev_top5_acc = cur_top5_acc
-            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 15):
+            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 25):
                 break
             else:
                 counter += 1
