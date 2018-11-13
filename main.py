@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 from alexnet import AlexNet
-from datagenerator import ImageDataGenerator
+from dataset import Dataset
 from datetime import datetime
 from tensorflow.data import Iterator
 from collections import Counter
@@ -181,35 +181,13 @@ def main(_):
     # Add the loss to summary
     tf.summary.scalar('train_loss', loss)
 
-    # Place data loading and preprocessing on the cpu
-    with tf.device('/cpu:0'):
-        tr_data = ImageDataGenerator(train_paths,
-                                     batch_size=batch_size,
-                                     num_classes=num_classes,
-                                     shuffle=True)
-        val_data = ImageDataGenerator(val_paths,
-                                      batch_size=batch_size,
-                                      num_classes=num_classes,
-                                      shuffle=False)
-        te_data = ImageDataGenerator(test_paths,
-                                     batch_size=batch_size,
-                                     num_classes=num_classes,
-                                     shuffle=False)
-
-        # create an reinitializable iterator given the dataset structure
-        iterator = Iterator.from_structure(tr_data.data.output_types,
-                                           tr_data.data.output_shapes)
-        next_batch = iterator.get_next()
-
-    # Ops for initializing the two different iterators
-    training_init_op = iterator.make_initializer(tr_data.data)
-    validation_init_op = iterator.make_initializer(val_data.data)
-    testing_init_op = iterator.make_initializer(te_data.data)
-
-    # Get the number of training/validation steps per epoch
-    tr_batches_per_epoch = int(np.floor(tr_data.data_size/batch_size))
-    val_batches_per_epoch = int(np.floor(val_data.data_size / batch_size))
-    te_batches_per_epoch = int(np.floor(te_data.data_size / batch_size))
+    # Initialize the datasets
+    start_time = time.time()
+    tr_data = Dataset(train_paths, batch_size, num_classes, True)
+    val_data = Dataset(val_paths, batch_size, num_classes, False)
+    te_data = Dataset(test_paths, batch_size, num_classes, False)
+    load_time = time.time() - start_time
+    log_buff = 'Data loading time: %.2f' % load_time + '\n'
 
     # Ops for evaluation
     acc_split_weights = tr_data.get_acc_split_weights(caffe_class_ids)
@@ -251,7 +229,6 @@ def main(_):
         # Load the pretrained weights into the non-trainable layer
         model.load_initial_weights(sess)
 
-        log_buff = ''
         log_buff += "{} Start training...".format(datetime.now())+'\n'
         #print("{} Open Tensorboard at --logdir {}".format(datetime.now(),
         #                                              filewriter_path))
@@ -266,11 +243,13 @@ def main(_):
         for epoch in range(num_epochs):
 
             log_buff += "{} Epoch: {}".format(datetime.now(), epoch)+'\n'
-            # Initialize iterator with the training dataset
-            start_time = time.time()
-            sess.run(training_init_op)
-            log_buff += 'Train data init time: %.2f' % (time.time() - start_time)+'\n'
 
+            tr_batches_per_epoch = tr_data.data_size // batch_size
+            tr_data.reset()
+            start_time = time.time()
+            tr_data.shuffle()
+            shuffle_time = time.time() - start_time
+            log_buff += 'Train data shuffling time: %.2f' % shuffle_time + '\n'
             cost = 0.0
             load_time = 0
             train_time = 0
@@ -278,7 +257,7 @@ def main(_):
 
                 # get next batch of data
                 start_time = time.time()
-                img_batch, label_batch = sess.run(next_batch)
+                img_batch, label_batch = tr_data.next_batch()
                 load_time += time.time() - start_time
 
                 # And run the training op
@@ -307,14 +286,12 @@ def main(_):
             tr_top1 = ResultStruct()
             tr_top5 = ResultStruct()
             # Evaluate on a for a smaller number of batches of trainset
-            start_time = time.time()
-            sess.run(training_init_op)
-            log_buff += 'Train (testing) data init time: %.2f' % (time.time() - start_time) + '\n'
+            tr_data.reset()
             start_time = time.time()
             num_batches = int(tr_batches_per_epoch/4);
             for _ in range(num_batches):
 
-                img_batch, label_batch = sess.run(next_batch)
+                img_batch, label_batch = tr_data.next_batch()
                 temp_top1, temp_top5 = sess.run((top1_accuracies, top5_accuracies), 
                                                  feed_dict={x: img_batch,
                                                             y: label_batch,
@@ -330,13 +307,12 @@ def main(_):
             # Test the model on the entire validation set
             val_top1 = ResultStruct()
             val_top5 = ResultStruct()
-            start_time = time.time()
-            sess.run(validation_init_op)
-            log_buff += 'Validation data init time: %.2f' % (time.time() - start_time) + '\n'
+            val_data.reset()
+            val_batches_per_epoch = val_data.data_size // batch_size
             start_time = time.time()
             for _ in range(val_batches_per_epoch):
 
-                img_batch, label_batch = sess.run(next_batch)
+                img_batch, label_batch = val_data.next_batch()
                 temp_top1, temp_top5 = sess.run((top1_accuracies, top5_accuracies), 
                                                  feed_dict={x: img_batch,
                                                             y: label_batch,
@@ -353,13 +329,12 @@ def main(_):
             # Test the model on the entire test set
             te_top1 = ResultStruct()
             te_top5 = ResultStruct()
-            start_time = time.time()
-            sess.run(testing_init_op)
-            log_buff += 'Test data init time: %.2f' % (time.time() - start_time) + '\n'
+            te_data.reset()
+            te_batches_per_epoch = te_data.data_size // batch_size
             start_time = time.time()
             for _ in range(te_batches_per_epoch):
 
-                img_batch, label_batch = sess.run(next_batch)
+                img_batch, label_batch = te_data.next_batch()
                 temp_top1, temp_top5 = sess.run((top1_accuracies, top5_accuracies), 
                                                  feed_dict={x: img_batch,
                                                             y: label_batch,
@@ -380,7 +355,7 @@ def main(_):
             if cur_top5_acc - prev_top5_acc > 0.003:
                 counter = 0
                 prev_top5_acc = cur_top5_acc
-            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 25):
+            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 15):
                 break
             else:
                 counter += 1
