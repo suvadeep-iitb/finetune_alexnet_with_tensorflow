@@ -1,4 +1,6 @@
 import os, time
+import pickle
+import math as m
 
 import cv2
 import numpy as np
@@ -11,8 +13,10 @@ flags = tf.flags
 
 flags.DEFINE_string("image_paths", None,
                     "File storing the paths of the images")
-flags.DEFINE_string("dest_dir", None,
+flags.DEFINE_string("save_file", None,
                     "Name of the destination directory")
+flags.DEFINE_integer("batch_size", 1,
+                     "Batch size")
 
 FLAGS=flags.FLAGS
 
@@ -22,16 +26,17 @@ imagenet_mean = np.array([104., 117., 124.], dtype=np.float32)
 def main(_):
     if not FLAGS.image_paths:
         raise ValueError("Must set --image_paths")
-    if not FLAGS.dest_dir:
-        raise ValueError("Must set --dest_dir")
+    if not FLAGS.save_file:
+        raise ValueError("Must set --save_file")
 
     image_paths_file = FLAGS.image_paths
-    dest_dir = FLAGS.dest_dir
+    save_file = FLAGS.save_file
+    batch_size = FLAGS.batch_size
     num_classes = 1000
     emb_dim = 4096
 
     # TF placeholder for graph input and output
-    x = tf.placeholder(tf.float32, [1, 227, 227, 3])
+    x = tf.placeholder(tf.float32, [None, 227, 227, 3])
     kp = tf.placeholder(tf.float32)
 
     # Initialize model
@@ -51,31 +56,45 @@ def main(_):
 
         pool5_tensor = sess.graph.get_tensor_by_name('pool5:0')
 
-        for i, path in  enumerate(image_paths):
+        num_batches = m.ceil(len(image_paths)/float(batch_size))
+        features = []
+        for i  in  range(num_batches):
+
+            s_batch = i * batch_size
+            e_batch = min(s_batch+batch_size, len(image_paths))
 
             # Read the image
-            img = cv2.imread(path)
-            # Convert image to float32 and resize to (227x227)
-            img = cv2.resize(img.astype(np.float32), (227,227))
+            img_pool = []
+            for b in range(s_batch, e_batch):
+                img = cv2.imread(image_paths[b])
+                # Convert image to float32 and resize to (227x227)
+                img = cv2.resize(img.astype(np.float32), (227,227))
 
-            # Subtract the ImageNet mean
-            img -= imagenet_mean
+                # Subtract the ImageNet mean
+                img -= imagenet_mean
 
-            # Reshape as needed to feed into model
-            img = img.reshape((1,227,227,3))
+                # Reshape as needed to feed into model
+                img_pool.append(img.reshape((227,227,3)))
 
-            feature = sess.run(pool5_tensor, feed_dict={x: img, kp: 1.0})
+            img_pool = np.stack(img_pool, axis = 0)
+
+            feature = sess.run(pool5_tensor, feed_dict={x: img_pool, kp: 1.0})
             feature = np.squeeze(np.reshape(feature, [-1, 6*6*256]))
+            features.append(feature)
 
-            file_name = path.split('/')[-1]
-            file_name = file_name.replace('.jpg', '.npy')
-
-            save_path = os.path.join(dest_dir, file_name)
-            np.save(save_path, feature)
-
-            if (i + 1) % 1000 == 0:
+            if (i + 1) % 10000 == 0:
                 print('Processed '+str(i+1)+' files')
 
+        features = np.vstack(features)
+
+        batch_size = 50000
+        array_list = []
+        split_idx = np.arange(batch_size, len(image_paths), batch_size)
+        features = np.split(features, split_idx, axis = 0)
+        for i, feature in enumerate(features):
+            print('Seg: %d size: %d' % (i, feature.shape[0]))
+
+        pickle.dump(features, open(save_file, 'wb'))
 
 
 
