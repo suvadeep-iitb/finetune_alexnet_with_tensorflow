@@ -27,8 +27,9 @@ Configuration Part.
 """
 
 # Path to the textfiles for the trainings and validation set
-train_file = 'train.txt'
-val_file = 'valid.txt'
+train_file = 'dogs_and_cats/train_small.txt'
+val_file = 'dogs_and_cats/val_small.txt'
+test_file = 'dogs_and_cats/test_small.txt'
 
 # Learning params
 learning_rate = 0.001
@@ -89,7 +90,7 @@ y = tf.placeholder(tf.float32, [batch_size, num_classes])
 keep_prob = tf.placeholder(tf.float32)
 
 # Initialize model
-model = AlexNet(x, keep_prob, num_classes, train_layers)
+model = AlexNet(x, keep_prob, num_classes, 4096, train_layers)
 
 # Link variable to model output
 score = model.fc8
