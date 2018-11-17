@@ -61,7 +61,7 @@ class Dataset(object):
 
 
     def _load_from_pickle_file(self):
-        self.img_contents, self.labels = pickle.load(open(self.pickle_file, 'rb'))
+        self.img_contents, self.labels, _ = pickle.load(open(self.pickle_file, 'rb'))
         if type(self.img_contents) is list:
             self.img_contents = np.vstack(self.img_contents)
 
