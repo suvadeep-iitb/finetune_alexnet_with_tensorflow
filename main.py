@@ -54,37 +54,41 @@ FLAGS=flags.FLAGS
 class ResultStruct:
     def __init__(self):
         self.acc = 0.0
-        self.acc_split_top10 = 0.0
-        self.acc_split_top10_100 = 0.0
-        self.acc_split_top100_1000 = 0.0
-        self.acc_split_top1000_10000 = 0.0
+        self.acc_split_1 = 0.0
+        self.acc_split_2 = 0.0
+        self.acc_split_3 = 0.0
+        self.acc_split_4 = 0.0
+        self.acc_split_5 = 0.0
         self.acc_caffe = 0.0
 
     def add(self, acc_array):
         self.acc += acc_array[0]
-        self.acc_split_top10 += acc_array[1]
-        self.acc_split_top10_100 += acc_array[2]
-        self.acc_split_top100_1000 += acc_array[3]
-        self.acc_split_top1000_10000 += acc_array[4]
-        self.acc_caffe += acc_array[5]
+        self.acc_split_1 += acc_array[1]
+        self.acc_split_2 += acc_array[2]
+        self.acc_split_3 += acc_array[3]
+        self.acc_split_4 += acc_array[4]
+        self.acc_split_5 += acc_array[5]
+        self.acc_caffe += acc_array[6]
 
     def scaler_div(self, div):
         self.div = 1.0 * div
         self.acc /= div
-        self.acc_split_top10 /= div
-        self.acc_split_top10_100 /= div
-        self.acc_split_top100_1000 /= div
-        self.acc_split_top1000_10000 /=div
+        self.acc_split_1 /= div
+        self.acc_split_2 /= div
+        self.acc_split_3 /= div
+        self.acc_split_4 /=div
+        self.acc_split_5 /=div
         self.acc_caffe /= div
 
     def __repr__(self):
         acc = self.acc
-        t10 = self.acc_split_top10
-        t100 = self.acc_split_top10_100
-        t1K = self.acc_split_top100_1000
-        t10K = self.acc_split_top1000_10000
+        t1 = self.acc_split_1
+        t2 = self.acc_split_2
+        t3 = self.acc_split_3
+        t4 = self.acc_split_4
+        t5 = self.acc_split_5
         tc = self.acc_caffe
-        rep_str = "%.4f (%.4f, %.4f, %.4f, %.4f) / (%.4f, %.4f)" % (acc, t10, t100, t1K, t10K, tc, acc - tc)
+        rep_str = "%.4f (%.4f, %.4f, %.4f, %.4f, %.4f) / (%.4f, %.4f)" % (acc, t1, t2, t3, t4, t5, tc, acc - tc)
         return rep_str
 
 
@@ -190,20 +194,27 @@ def main(_):
     log_buff = 'Data loading time: %.2f' % load_time + '\n'
 
     # Ops for evaluation
-    acc_split_weights = tr_data.get_acc_split_weights(caffe_class_ids)
-    acc_split_weights = tf.convert_to_tensor(acc_split_weights, tf.float32)
+    acc_split_weights_all = tr_data.get_acc_split_weights(caffe_class_ids, 0)
+    acc_split_weights_all = tf.convert_to_tensor(acc_split_weights_all, tf.float32)
+
+    acc_split_weights_1000 = tr_data.get_acc_split_weights(caffe_class_ids, 1000)
+    acc_split_weights_1000 = tf.convert_to_tensor(acc_split_weights_1000, tf.float32)
     with tf.name_scope('accuracy'):
-        label_splits = tf.matmul(acc_split_weights, tf.transpose(y))
-
         # ops for top 1 accuracies and their splitting
-        top1_correct_pred =  tf.cast(tf.nn.in_top_k(score, tf.argmax(y, 1), 1), tf.float32)
-        top1_correct_pred = tf.reshape(top1_correct_pred, [-1, 1])
-        top1_accuracies = tf.squeeze(tf.matmul(label_splits, top1_correct_pred))/batch_size
+        _, top1 = tf.nn.top_k(score, 1)
+        top1_y = tf.gather(y, top1)
+        top1_split_mask_all = tf.gather(acc_split_weights_all, top1)
+        top1_split_mask_1000 = tf.gather(acc_split_weights_1000, top1)
+        top1_precision_all = tf.squeeze(tf.reduce_mean(tf.matmul(top1_split_mask_all, tf.transpose(top1_y)), axis = 1))
+        top1_precision_1000 = tf.squeeze(tf.reduce_mean(tf.matmul(top1_split_mask_1000, tf.transpose(top1_y)), axis = 1))
 
-        # ops for top 1 accuracies and their splitting
-        top5_correct_pred =  tf.cast(tf.nn.in_top_k(score, tf.argmax(y, 1), 5), tf.float32)
-        top5_correct_pred = tf.reshape(top5_correct_pred, [-1, 1])
-        top5_accuracies = tf.squeeze(tf.matmul(label_splits, top5_correct_pred))/batch_size
+        # ops for top 5 accuracies and their splitting
+        _, top5 = tf.nn.top_k(score, 5)
+        top5_y = tf.gather(y, top5)
+        top5_split_mask_all = tf.gather(acc_split_weights_all, top5)
+        top5_split_mask_1000 = tf.gather(acc_split_weights_1000, top5)
+        top5_precision_all = tf.squeeze(tf.reduce_mean(tf.matmul(top5_split_mask_all, tf.transpose(top5_y)), axis = 1))/5.0
+        top5_precision_1000 = tf.squeeze(tf.reduce_mean(tf.matmul(top5_split_mask_1000, tf.transpose(top5_y)), axis = 1))
 
     # Merge all summaries together
     merged_summary = tf.summary.merge_all()
@@ -283,8 +294,10 @@ def main(_):
                     (epoch+1, cost/tr_batches_per_epoch, elapsed_time, load_time, train_time) + '\n'
 
             # Test the model on the sampled train set
-            tr_top1 = ResultStruct()
-            tr_top5 = ResultStruct()
+            tr_top1_all = ResultStruct()
+            tr_top1_1000 = ResultStruct()
+            tr_top5_all = ResultStruct()
+            tr_top5_1000 = ResultStruct()
             # Evaluate on a for a smaller number of batches of trainset
             tr_data.reset()
             start_time = time.time()
@@ -292,66 +305,94 @@ def main(_):
             for _ in range(num_batches):
 
                 img_batch, label_batch = tr_data.next_batch()
-                temp_top1, temp_top5 = sess.run((top1_accuracies, top5_accuracies), 
-                                                 feed_dict={x: img_batch,
-                                                            y: label_batch,
+                prec1_all, prec1_1000, prec5_all, prec5_1000 = \
+                        sess.run((top1_precision_all, top1_precision_1000, \
+                                  top5_precision_all, top5_precision_1000), \
+                                                 feed_dict={x: img_batch, \
+                                                            y: label_batch, \
                                                             kp: 1.0});
-                tr_top1.add(temp_top1)
-                tr_top5.add(temp_top5)
-            tr_top1.scaler_div(num_batches)
-            tr_top5.scaler_div(num_batches)
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 1 Acc: ' + str(tr_top1) + '\n'
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 5 Acc: ' + str(tr_top5) + '\n'
+                tr_top1_all.add(prec1_all)
+                tr_top1_1000.add(prec1_1000)
+                tr_top5_all.add(prec5_all)
+                tr_top5_1000.add(prec5_1000)
+            tr_top1_all.scaler_div(num_batches)
+            tr_top1_1000.scaler_div(num_batches)
+            tr_top5_all.scaler_div(num_batches)
+            tr_top5_1000.scaler_div(num_batches)
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 1 All  Acc: ' + str(tr_top1_all) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 1 1000 Acc: ' + str(tr_top1_1000) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 5 All  Acc: ' + str(tr_top5_all) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 5 1000 Acc: ' + str(tr_top5_1000) + '\n'
             tr_pred_time = time.time() - start_time
 
             # Test the model on the entire validation set
-            val_top1 = ResultStruct()
-            val_top5 = ResultStruct()
+            val_top1_all = ResultStruct()
+            val_top1_1000 = ResultStruct()
+            val_top5_all = ResultStruct()
+            val_top5_1000 = ResultStruct()
             val_data.reset()
             val_batches_per_epoch = val_data.data_size // batch_size
             start_time = time.time()
             for _ in range(val_batches_per_epoch):
 
                 img_batch, label_batch = val_data.next_batch()
-                temp_top1, temp_top5 = sess.run((top1_accuracies, top5_accuracies), 
-                                                 feed_dict={x: img_batch,
-                                                            y: label_batch,
+                prec1_all, prec1_1000, prec5_all, prec5_1000 = \
+                        sess.run((top1_precision_all, top1_precision_1000, \
+                                  top5_precision_all, top5_precision_1000), \
+                                                 feed_dict={x: img_batch, \
+                                                            y: label_batch, \
                                                             kp: 1.0})
-                val_top1.add(temp_top1)
-                val_top5.add(temp_top5)
-            val_top1.scaler_div(val_batches_per_epoch)
-            val_top5.scaler_div(val_batches_per_epoch)
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 1 Acc: ' + str(val_top1) + '\n'
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 5 Acc: ' + str(val_top5) + '\n'
+                val_top1_all.add(prec1_all)
+                val_top1_1000.add(prec1_1000)
+                val_top5_all.add(prec5_all)
+                val_top5_1000.add(prec5_1000)
+            val_top1_all.scaler_div(val_batches_per_epoch)
+            val_top1_1000.scaler_div(val_batches_per_epoch)
+            val_top5_all.scaler_div(val_batches_per_epoch)
+            val_top5_1000.scaler_div(val_batches_per_epoch)
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 1 All  Acc: ' + str(val_top1_all) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 1 1000 ACC: ' + str(val_top1_1000) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 5 All  Acc: ' + str(val_top5_all) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 5 1000 Acc: ' + str(val_top5_1000) + '\n'
 
             val_pred_time = time.time() - start_time
 
             # Test the model on the entire test set
-            te_top1 = ResultStruct()
-            te_top5 = ResultStruct()
+            te_top1_all = ResultStruct()
+            te_top1_1000 = ResultStruct()
+            te_top5_all = ResultStruct()
+            te_top5_1000 = ResultStruct()
             te_data.reset()
             te_batches_per_epoch = te_data.data_size // batch_size
             start_time = time.time()
             for _ in range(te_batches_per_epoch):
 
                 img_batch, label_batch = te_data.next_batch()
-                temp_top1, temp_top5 = sess.run((top1_accuracies, top5_accuracies), 
-                                                 feed_dict={x: img_batch,
-                                                            y: label_batch,
+                prec1_all, prec1_1000, prec5_all, prec5_1000 = \
+                        sess.run((top1_precision_all, top1_precision_1000, \
+                                  top5_precision_all, top5_precision_1000), \
+                                                 feed_dict={x: img_batch, \
+                                                            y: label_batch, \
                                                             kp: 1.0});
-                te_top1.add(temp_top1)
-                te_top5.add(temp_top5)
-            te_top1.scaler_div(te_batches_per_epoch)
-            te_top5.scaler_div(te_batches_per_epoch)
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 1 Acc: ' + str(te_top1) + '\n'
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 5 Acc: ' + str(te_top5) + '\n'
+                te_top1_all.add(prec1_all)
+                te_top1_1000.add(prec1_1000)
+                te_top5_all.add(prec5_all)
+                te_top5_1000.add(prec5_1000)
+            te_top1_all.scaler_div(te_batches_per_epoch)
+            te_top1_1000.scaler_div(te_batches_per_epoch)
+            te_top5_all.scaler_div(te_batches_per_epoch)
+            te_top5_1000.scaler_div(te_batches_per_epoch)
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 1 All  Acc: ' + str(te_top1_all) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 1 1000 Acc: ' + str(te_top1_1000) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 5 All  Acc: ' + str(te_top5_all) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 5 1000 Acc: ' + str(te_top5_1000) + '\n'
             te_pred_time = time.time() - start_time
 
             elapsed_time = tr_pred_time + val_pred_time + te_pred_time
             log_buff += 'Epoch %d Prediction: \tElapsed Time: %.2f (%.2f / %.2f / %.2f)' \
                     % (epoch+1, elapsed_time, tr_pred_time, val_pred_time, te_pred_time) + '\n'
 
-            cur_top5_acc = val_top5.acc
+            cur_top5_acc = val_top5_all.acc
             if cur_top5_acc - prev_top5_acc > 0.003:
                 counter = 0
                 prev_top5_acc = cur_top5_acc
