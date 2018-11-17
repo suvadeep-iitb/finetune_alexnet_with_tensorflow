@@ -43,8 +43,12 @@ def main(_):
     train_layers = []
     model = AlexNet(x, kp, num_classes, emb_dim, train_layers)
 
-    image_paths = open(image_paths_file).readlines()
-    image_paths = [l.split()[0] for l in image_paths]
+    lines = open(image_paths_file).readlines()
+    image_paths = [l.split()[0] for l in lines]
+    def path2id(path):
+        return path.split('/')[-1][:-4]
+    ids = [path2id(p.split()[0]) for p in image_paths]
+    labels = [int(l.split()[1]) for l in lines]
 
     with tf.Session() as sess:
 
@@ -94,7 +98,7 @@ def main(_):
         for i, feature in enumerate(features):
             print('Seg: %d size: %d' % (i, feature.shape[0]))
 
-        pickle.dump(features, open(save_file, 'wb'))
+        pickle.dump((features, labels, ids), open(save_file, 'wb'))
 
 
 
