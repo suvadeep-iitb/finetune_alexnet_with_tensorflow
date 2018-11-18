@@ -201,20 +201,22 @@ def main(_):
     acc_split_weights_1000 = tf.convert_to_tensor(acc_split_weights_1000, tf.float32)
     with tf.name_scope('accuracy'):
         # ops for top 1 accuracies and their splitting
-        _, top1 = tf.nn.top_k(score, 1)
-        top1_y = tf.gather(y, top1)
-        top1_split_mask_all = tf.gather(acc_split_weights_all, top1)
-        top1_split_mask_1000 = tf.gather(acc_split_weights_1000, top1)
-        top1_precision_all = tf.squeeze(tf.reduce_mean(tf.matmul(top1_split_mask_all, tf.transpose(top1_y)), axis = 1))
-        top1_precision_1000 = tf.squeeze(tf.reduce_mean(tf.matmul(top1_split_mask_1000, tf.transpose(top1_y)), axis = 1))
+        top1_score, _ = tf.nn.top_k(score, 1)
+        top1_y = tf.to_float(tf.math.greater_equal(score, tf.reduce_min(top1_score)))
+        top1_correct_pred = tf.multiply(y, top1_y)
+        top1_precision_all = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights_all, \
+                                                       tf.transpose(top1_correct_pred)), axis = 1))
+        top1_precision_1000 = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights_1000, \
+                                                        tf.transpose(top1_correct_pred)), axis = 1))
 
         # ops for top 5 accuracies and their splitting
-        _, top5 = tf.nn.top_k(score, 5)
-        top5_y = tf.gather(y, top5)
-        top5_split_mask_all = tf.gather(acc_split_weights_all, top5)
-        top5_split_mask_1000 = tf.gather(acc_split_weights_1000, top5)
-        top5_precision_all = tf.squeeze(tf.reduce_mean(tf.matmul(top5_split_mask_all, tf.transpose(top5_y)), axis = 1))/5.0
-        top5_precision_1000 = tf.squeeze(tf.reduce_mean(tf.matmul(top5_split_mask_1000, tf.transpose(top5_y)), axis = 1))
+        top5_score, _ = tf.nn.top_k(score, 5)
+        top5_y = tf.to_float(tf.math.greater_equal(score, tf.reduce_min(top5_score)))
+        top5_correct_pred = tf.multiply(y, top5_y)
+        top5_precision_all = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights_all, \
+                                                       tf.transpose(top5_correct_pred)), axis = 1))/5.0
+        top5_precision_1000 = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights_1000, \
+                                                        tf.transpose(top5_correct_pred)), axis = 1))
 
     # Merge all summaries together
     merged_summary = tf.summary.merge_all()
