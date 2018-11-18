@@ -202,7 +202,9 @@ def main(_):
     with tf.name_scope('accuracy'):
         # ops for top 1 accuracies and their splitting
         top1_score, _ = tf.nn.top_k(score, 1)
-        top1_y = tf.to_float(tf.math.greater_equal(score, tf.reduce_min(top1_score)))
+        top1_thresolds = tf.reduce_min(top1_score, axis = 1, keepdims = True)
+        top1_thresolds_bc = tf.broadcast_to(top1_thresolds, score.shape)
+        top1_y = tf.to_float(tf.math.greater_equal(score, top1_thresolds_bc))
         top1_correct_pred = tf.multiply(y, top1_y)
         top1_precision_all = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights_all, \
                                                        tf.transpose(top1_correct_pred)), axis = 1))
@@ -211,7 +213,9 @@ def main(_):
 
         # ops for top 5 accuracies and their splitting
         top5_score, _ = tf.nn.top_k(score, 5)
-        top5_y = tf.to_float(tf.math.greater_equal(score, tf.reduce_min(top5_score)))
+        top5_thresolds = tf.reduce_min(top5_score, axis = 1, keepdims = True)
+        top5_thresolds_bc = tf.broadcast_to(top5_thresolds, score.shape)
+        top5_y = tf.to_float(tf.math.greater_equal(score, top5_thresolds_bc))
         top5_correct_pred = tf.multiply(y, top5_y)
         top5_precision_all = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights_all, \
                                                        tf.transpose(top5_correct_pred)), axis = 1))/5.0
