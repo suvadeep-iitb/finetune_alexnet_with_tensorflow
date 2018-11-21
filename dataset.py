@@ -102,8 +102,8 @@ class Dataset(object):
     def get_acc_split_weights(self, caffe_class_ids, max_classes):
         if max_classes > self.num_classes or max_classes == 0:
             max_classes = self.num_classes
-        class_freqs = self.labels.sum(0)[:max_classes]
-        class_freqs = np.reshape(np.array(class_freqs), [-1])
+        class_freqs = self.labels.sum(0)
+        class_freqs = np.reshape(np.array(class_freqs), [-1])[:max_classes]
         sorted_ids = np.argsort(-class_freqs)
 
         class_buckets = [0, 125, 250, 500, 1000, 10000]

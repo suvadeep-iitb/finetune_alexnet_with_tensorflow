@@ -220,7 +220,7 @@ def main(_):
         top5_precision_all = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights_all, \
                                                        tf.transpose(top5_correct_pred)), axis = 1))/5.0
         top5_precision_1000 = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights_1000, \
-                                                        tf.transpose(top5_correct_pred)), axis = 1))
+                                                        tf.transpose(top5_correct_pred)), axis = 1))/5.0
 
     # Merge all summaries together
     merged_summary = tf.summary.merge_all()
