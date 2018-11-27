@@ -405,7 +405,7 @@ def main(_):
             if cur_top5_acc - prev_top5_acc > 0.003:
                 counter = 0
                 prev_top5_acc = cur_top5_acc
-            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 5):
+            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 15):
                 break
             else:
                 counter += 1
