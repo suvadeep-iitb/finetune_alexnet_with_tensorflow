@@ -1,4 +1,4 @@
-import os, time
+import os, time, math
 
 import numpy as np
 import tensorflow as tf
@@ -296,8 +296,9 @@ def main(_):
                 '''
 
             elapsed_time = load_time + train_time
+            cost /= tr_batches_per_epoch
             log_buff += 'Epoch: %d\tCost: %.6f\tElapsed Time: %.2f (%.2f / %.2f)' % \
-                    (epoch+1, cost/tr_batches_per_epoch, elapsed_time, load_time, train_time) + '\n'
+                    (epoch+1, cost, elapsed_time, load_time, train_time) + '\n'
 
             # Test the model on the sampled train set
             tr_top1_all = ResultStruct()
@@ -398,11 +399,13 @@ def main(_):
             log_buff += 'Epoch %d Prediction: \tElapsed Time: %.2f (%.2f / %.2f / %.2f)' \
                     % (epoch+1, elapsed_time, tr_pred_time, val_pred_time, te_pred_time) + '\n'
 
+            if math.isnan(cost):
+                break
             cur_top5_acc = val_top5_all.acc
             if cur_top5_acc - prev_top5_acc > 0.003:
                 counter = 0
                 prev_top5_acc = cur_top5_acc
-            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 15):
+            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 5):
                 break
             else:
                 counter += 1

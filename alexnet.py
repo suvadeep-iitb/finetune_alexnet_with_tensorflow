@@ -59,13 +59,18 @@ class AlexNet(object):
     def create(self):
         """Create the network graph."""
         # First five layers have been skipped
-        
+       
+        if self.SKIP_LAYER == 3:
+            mid_layer_dim = self.EMB_DIM
+        else:
+            mid_layer_dim = 4096
+
         # 6th Layer: Flatten -> FC (w ReLu) -> Dropout
-        fc6 = fc(self.X, 6*6*256, 4096, name='fc6')
+        fc6 = fc(self.X, 6*6*256, mid_layer_dim, name='fc6')
         dropout6 = dropout(fc6, self.KEEP_PROB)
 
         # 7th Layer: FC (w ReLu) -> Dropout
-        fc7 = fc(dropout6, 4096, self.EMB_DIM, name='fc7')
+        fc7 = fc(dropout6, mid_layer_dim, self.EMB_DIM, name='fc7')
         dropout7 = dropout(fc7, self.KEEP_PROB)
 
         # 8th Layer: FC and return unscaled activations
