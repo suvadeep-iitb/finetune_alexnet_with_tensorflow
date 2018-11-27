@@ -112,6 +112,13 @@ class AlexNet(object):
                             session.run(var.assign(data))
 
 
+    def get_label_embedding(self):
+        with tf.variable_scope('fc8', reuse=True):
+            weights = tf.get_variable('weights')
+            biases = tf.get_variable('biases')
+        return tf.stack([weights, tf.reshape(biases, [-1, 1])], axis = 0)
+
+
 def conv(x, filter_height, filter_width, num_filters, stride_y, stride_x, name,
          padding='SAME', groups=1):
     """Create a convolution layer.
