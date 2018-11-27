@@ -28,7 +28,7 @@ import numpy as np
 class AlexNet(object):
     """Implementation of the AlexNet."""
 
-    def __init__(self, x, keep_prob, num_classes, emb_dim, skip_layer,
+    def __init__(self, x, keep_prob, num_classes, emb_dim, skip_layers,
                  weights_path='DEFAULT'):
         """Create the graph of the AlexNet model.
 
@@ -46,7 +46,7 @@ class AlexNet(object):
         self.NUM_CLASSES = num_classes
         self.KEEP_PROB = keep_prob
         self.EMB_DIM = emb_dim
-        self.SKIP_LAYER = skip_layer
+        self.SKIP_LAYERS = skip_layers
 
         if weights_path == 'DEFAULT':
             self.WEIGHTS_PATH = 'bvlc_alexnet.npy'
@@ -60,7 +60,7 @@ class AlexNet(object):
         """Create the network graph."""
         # First five layers have been skipped
        
-        if self.SKIP_LAYER == 3:
+        if len(self.SKIP_LAYERS) == 3:
             mid_layer_dim = self.EMB_DIM
         else:
             mid_layer_dim = 4096
@@ -88,13 +88,13 @@ class AlexNet(object):
         weights_dict = np.load(self.WEIGHTS_PATH, encoding='bytes').item()
 
         # Add first 5 layers into the skip layer list
-        self.SKIP_LAYER += ['conv1', 'conv2', 'conv3', 'conv4', 'conv5']
+        skip_layers = self.SKIP_LAYERS + ['conv1', 'conv2', 'conv3', 'conv4', 'conv5']
 
         # Loop over all layer names stored in the weights dict
         for op_name in weights_dict:
 
             # Check if layer should be trained from scratch
-            if op_name not in self.SKIP_LAYER:
+            if op_name not in skip_layers:
 
                 with tf.variable_scope(op_name, reuse=True):
 
@@ -116,7 +116,7 @@ class AlexNet(object):
         with tf.variable_scope('fc8', reuse=True):
             weights = tf.get_variable('weights')
             biases = tf.get_variable('biases')
-        return tf.stack([weights, tf.reshape(biases, [-1, 1])], axis = 0)
+        return tf.concat([weights, tf.reshape(biases, [1, -1])], axis = 0)
 
 
 def conv(x, filter_height, filter_width, num_filters, stride_y, stride_x, name,

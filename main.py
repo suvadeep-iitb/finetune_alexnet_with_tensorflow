@@ -171,11 +171,11 @@ def main(_):
         loss = tf.reduce_mean(loss)
 
     if weight != 0:
-        label_embedding = AlexNet.get_label_embedding()
+        label_embedding = model.get_label_embedding()
         cross_corr = tf.matmul(tf.transpose(label_embedding), label_embedding)
 
         corr = np.load(corr_path)
-        loss = loss - weight * tf.dot(tf.reshape(cross_corr, [-1]), tf.reshape(corr, [-1]))
+        loss = loss - weight * tf.reduce_sum(tf.multiply(tf.reshape(cross_corr, [-1]), tf.reshape(corr, [-1])))
 
     # Train op
     with tf.name_scope("train"):
