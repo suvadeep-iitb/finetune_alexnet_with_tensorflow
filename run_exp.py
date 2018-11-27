@@ -57,6 +57,7 @@ with open('params_file.csv') as csvfile:
     TRPATHS = param_dict['TRAIN_PATHS']
     VPATHS = param_dict['VAL_PATHS']
     TEPATHS = param_dict['TEST_PATHS']
+    CRPATH = param_dict['CORR_PATH']
     CPATH = param_dict['CHP_PATH']
     FPATH = param_dict['FW_PATH']
 
@@ -69,6 +70,7 @@ with open('params_file.csv') as csvfile:
     LFUNC = param_dict['LOSS_FUNC']
     KPROB = param_dict['KEEP_PROB']
     EX = param_dict['EXP']
+    WGT = param_dict['WEIGHT']
     LR = param_dict['LEARNING_RATE']
     NEPOCHS = param_dict['NUM_EPOCHS']
     BSIZE = param_dict['BATCH_SIZE']
@@ -78,6 +80,7 @@ with open('params_file.csv') as csvfile:
     qsub_command = 'qsub -v TRAIN_PATHS='+TRPATHS+ \
                    ',VAL_PATHS='+VPATHS+ \
                    ',TEST_PATHS='+TEPATHS+ \
+                   ',CORR_PATH='+CRPATH+ \
                    ',CHP_PATH='+CPATH+ \
                    ',FW_PATH='+FPATH+ \
                    ',MAX_THR='+str(MTHR)+ \
@@ -88,6 +91,7 @@ with open('params_file.csv') as csvfile:
                    ',LOSS_FUNC='+LFUNC+ \
                    ',KEEP_PROB='+str(KPROB)+ \
                    ',EXP='+str(EX)+ \
+                   ',WEIGHT='+str(WGT)+ \
                    ',LEARNING_RATE='+str(LR)+ \
                    ',NUM_EPOCHS='+str(NEPOCHS)+ \
                    ',BATCH_SIZE='+str(BSIZE)+ \
