@@ -76,7 +76,7 @@ with open('params_file.csv') as csvfile:
     BSIZE = param_dict['BATCH_SIZE']
 
     
-    OUT='IMGNET_EMB'+str(EDIM)+'_NLAYERS'+str(NTR_LAYERS)+'_LFUNC'+LFUNC+'_KPROB'+str(KPROB)+'_EXP'+str(EX)+'_LR'+str(LR)+'_BS'+str(BSIZE)
+    OUT='IMGNET_EMB'+str(EDIM)+'_NLAYERS'+str(NTR_LAYERS)+'_LFUNC'+LFUNC+'_KPROB'+str(KPROB)+'_EXP'+str(EX)+'_WGT'+str(WGT)+'_LR'+str(LR)+'_BS'+str(BSIZE)
     qsub_command = 'qsub -v TRAIN_PATHS='+TRPATHS+ \
                    ',VAL_PATHS='+VPATHS+ \
                    ',TEST_PATHS='+TEPATHS+ \
