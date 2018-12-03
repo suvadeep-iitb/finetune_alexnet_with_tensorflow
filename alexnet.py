@@ -29,7 +29,7 @@ class AlexNet(object):
     """Implementation of the AlexNet."""
 
     def __init__(self, x, keep_prob, num_classes, emb_dim, skip_layers,
-                 weights_path='DEFAULT'):
+                 exp = 1.0, weights_path='DEFAULT'):
         """Create the graph of the AlexNet model.
 
         Args:
@@ -47,6 +47,7 @@ class AlexNet(object):
         self.KEEP_PROB = keep_prob
         self.EMB_DIM = emb_dim
         self.SKIP_LAYERS = skip_layers
+        self.EXP = exp
 
         if weights_path == 'DEFAULT':
             self.WEIGHTS_PATH = 'bvlc_alexnet.npy'
@@ -71,6 +72,9 @@ class AlexNet(object):
 
         # 7th Layer: FC (w ReLu) -> Dropout
         fc7 = fc(dropout6, mid_layer_dim, self.EMB_DIM, name='fc7')
+        if self.EXP != 1:
+            sign7 = tf.sign(fc7)
+            fc7 = tf.multiply(sign7, tf.pow(tf.abs(fc7), self.EXP))
         dropout7 = dropout(fc7, self.KEEP_PROB)
 
         # 8th Layer: FC and return unscaled activations
