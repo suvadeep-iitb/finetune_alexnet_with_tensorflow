@@ -1,25 +1,25 @@
 #!/usr/bin/env python
 import csv
 
-TRAIN_PATHS='500K_imagenet/train_d52.pkl'
-VAL_PATHS='500K_imagenet/val_d52.pkl'
-TEST_PATHS='500K_imagenet/test_d52.pkl'
+TRAIN_PATHS='500K_imagenet/train_d0.pkl'
+VAL_PATHS='500K_imagenet/val_d0.pkl'
+TEST_PATHS='500K_imagenet/test_d0.pkl'
 CHP_PATH='tmp/imagenet/checkpoint/'
 FW_PATH='tmp/imagenet/filewriter/'
 
 MAX_THR=0
 DIS_STEP=5
-NUM_CLASSES=1240
+NUM_CLASSES=1000
 
-LOSS_FUNC='logistic'
+LOSS_FUNC='softmax'
 NUM_EPOCHS=400
 BATCH_SIZE=128
 
 NUM_TR_LAYERS_LIST=[3]
-EMB_DIM_LIST=[10, 20]
-EXP_LIST=[1.3, 1.5]
-KEEP_PROB_LIST=[1.0]
-LEARNING_RATE_LIST=[0.000001, 0.000005]
+EMB_DIM_LIST=[50]
+EXP_LIST=[1.0]
+KEEP_PROB_LIST=[0.5]
+LEARNING_RATE_LIST=[0.0001]
 
 
 fieldnames = ["TRAIN_PATHS", "VAL_PATHS", "TEST_PATHS", "CHP_PATH", \
