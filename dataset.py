@@ -63,7 +63,7 @@ class Dataset(object):
     def _load_from_pickle_file(self):
         self.img_contents, self.labels, _ = pickle.load(open(self.pickle_file, 'rb'))
         if type(self.img_contents) is list:
-            self.img_contents = np.vstack(self.img_contents)
+            self.img_contents = np.concatenate(self.img_contents, axis = 0)
 
 
     def _one_hot(self, labels, num_classes):
@@ -89,11 +89,11 @@ class Dataset(object):
         s_idx = self.counter
         e_idx = self.counter + self.batch_size
         if e_idx <= self.data_size:
-            img_batch = self.img_contents[s_idx: e_idx, :]
+            img_batch = self.img_contents[s_idx: e_idx, :, :, :]
             lbl_batch = self.labels[s_idx: e_idx, :].todense()
         else:
             e_idx = self.batch_size - s_idx
-            img_batch = np.vstack(self.img_contents[s_idx:, :], self.img_contents[:e_idx, :])
+            img_batch = np.concatenate(self.img_contents[s_idx:, :, :, :], self.img_contents[:e_idx, :, :, :], axis = 0)
             lbl_batch = vstack(self.labels[s_idx:, :], self.labels[:e_idx, :]).todense()
         self.counter = e_idx
         return img_batch, lbl_batch

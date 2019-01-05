@@ -58,10 +58,19 @@ class AlexNet(object):
 
     def create(self):
         """Create the network graph."""
-        # First five layers have been skipped
-       
+        # 3rd Layer: Conv (w ReLu)
+        conv3 = conv(self.X, 3, 3, 384, 1, 1, name='conv3')
+
+        # 4th Layer: Conv (w ReLu) splitted into two groups
+        conv4 = conv(conv3, 3, 3, 384, 1, 1, groups=2, name='conv4')
+
+        # 5th Layer: Conv (w ReLu) -> Pool splitted into two groups
+        conv5 = conv(conv4, 3, 3, 256, 1, 1, groups=2, name='conv5')
+        pool5 = max_pool(conv5, 3, 3, 2, 2, padding='VALID', name='pool5')
+
         # 6th Layer: Flatten -> FC (w ReLu) -> Dropout
-        fc6 = fc(self.X, 6*6*256, self.EMB_DIM, name='fc6')
+        flattened = tf.reshape(pool5, [-1, 6*6*256])
+        fc6 = fc(flattened, 6*6*256, self.EMB_DIM, name='fc6')
         dropout6 = dropout(fc6, self.KEEP_PROB)
 
         # 7th Layer: FC (w ReLu) -> Dropout
@@ -83,7 +92,7 @@ class AlexNet(object):
         weights_dict = np.load(self.WEIGHTS_PATH, encoding='bytes').item()
 
         # Add first 5 layers into the skip layer list
-        skip_layers = self.SKIP_LAYERS + ['conv1', 'conv2', 'conv3', 'conv4', 'conv5']
+        skip_layers = self.SKIP_LAYERS + ['conv1', 'conv2']
 
         # Loop over all layer names stored in the weights dict
         for op_name in weights_dict:

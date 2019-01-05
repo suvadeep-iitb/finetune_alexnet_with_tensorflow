@@ -126,12 +126,12 @@ def main(_):
     '''
 
     # TF placeholder for graph input and output
-    x = tf.placeholder(tf.float32, [batch_size, 6*6*256])
+    x = tf.placeholder(tf.float32, [batch_size, 13, 13, 256])
     y = tf.placeholder(tf.float32, [batch_size, num_classes])
     kp = tf.placeholder(tf.float32)
 
     # Initialize model
-    layer_names = ['fc6', 'fc7', 'fc8']
+    layer_names = ['conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']
     train_layers = layer_names[-FLAGS.num_train_layers:]
     model = AlexNet(x, kp, num_classes, emb_dim, train_layers)
 
