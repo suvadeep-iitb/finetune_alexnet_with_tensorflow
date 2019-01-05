@@ -188,6 +188,23 @@ def fc(x, num_in, num_out, name, relu=True):
         return act
 
 
+def fc_tanh(x, num_in, num_out, name):
+    """Create a fully connected layer."""
+    with tf.variable_scope(name) as scope:
+
+        # Create tf variables for the weights and biases
+        weights = tf.get_variable('weights', shape=[num_in, num_out],
+                                  trainable=True)
+        biases = tf.get_variable('biases', [num_out], trainable=True)
+
+        # Matrix multiply weights and inputs and add bias
+        act = tf.nn.xw_plus_b(x, weights, biases, name=scope.name)
+
+    # Apply tanh non linearity
+    tanh = tf.nn.tanh(act)
+    return tanh
+
+
 def max_pool(x, filter_height, filter_width, stride_y, stride_x, name,
              padding='SAME'):
     """Create a max pooling layer."""

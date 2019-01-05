@@ -139,7 +139,7 @@ def main(_):
     # Initialize model
     layer_names = ['fc6', 'fc7', 'fc8']
     train_layers = layer_names[-FLAGS.num_train_layers:]
-    model = AlexNet(x, kp, num_classes, emb_dim, train_layers)
+    model = AlexNet(x, kp, num_classes, emb_dim, train_layers, 1.0)
 
     # Link variable to model output
     score = model.fc8
@@ -220,7 +220,7 @@ def main(_):
                                                    tf.transpose(top1_correct_pred)), axis = 1))
 
         # ops for top 5 accuracies and their splitting
-        top5_score, _ = tf.nn.top_k(score, 5)
+        top5_score, _ = tf.nn.top_k(score, min(5, num_classes))
         top5_thresolds = tf.reduce_min(top5_score, axis = 1, keepdims = True)
         top5_thresolds_bc = tf.broadcast_to(top5_thresolds, score.shape)
         top5_y = tf.to_float(tf.math.greater_equal(score, top5_thresolds_bc))
@@ -261,7 +261,7 @@ def main(_):
         log_buff = ''
 
         # Loop over number of epochs
-        prev_top5_acc = 0
+        prev_acc = 0
         counter = 0
         for epoch in range(num_epochs):
 
@@ -377,11 +377,11 @@ def main(_):
 
             if math.isnan(cost):
                 break
-            cur_top5_acc = val_top5.acc
-            if cur_top5_acc - prev_top5_acc > 0.003:
+            cur_acc = val_top5.acc
+            if cur_acc - prev_acc > 0.003:
                 counter = 0
-                prev_top5_acc = cur_top5_acc
-            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 15):
+                prev_acc = cur_acc
+            elif (cur_acc - prev_acc < -0.5) or (counter == 15):
                 break
             else:
                 counter += 1
