@@ -43,6 +43,10 @@ flags.DEFINE_float("keep_prob", 1.0,
                    "Keep probability to be used for dropout")
 flags.DEFINE_float("exp", 1.0,
                    "exponent to be used element-wise power operations on the logits")
+flags.DEFINE_float("c", 0.005,
+                   "cutoff to be used in eexponentiation")
+flags.DEFINE_integer("nel", 0,
+                     "number of eexponentiation layer to be inserted")
 flags.DEFINE_float("weight", 0.0,
                    "weight for the label correlations in loss function")
 flags.DEFINE_float("learning_rate", 0.01,
@@ -115,6 +119,8 @@ def main(_):
     emb_dim = FLAGS.embedding_dim
     keep_prob = FLAGS.keep_prob
     exp = FLAGS.exp
+    c = FLAGS.c
+    nel = FLAGS.nel
     weight = FLAGS.weight
     loss_func = FLAGS.loss_func
     learning_rate = FLAGS.learning_rate
@@ -139,13 +145,10 @@ def main(_):
     # Initialize model
     layer_names = ['fc6', 'fc7', 'fc8']
     train_layers = layer_names[-FLAGS.num_train_layers:]
-    model = AlexNet(x, kp, num_classes, emb_dim, train_layers, 1.0)
+    model = AlexNet(x, kp, exp, num_classes, emb_dim, train_layers, c, nel)
 
     # Link variable to model output
     score = model.fc8
-    if exp != 1.0:
-        sign = tf.sign(score)
-        score = tf.multiply(sign, tf.pow(tf.abs(score), exp))
 
     # List of trainable variables of the layers we want to train
     var_list = [v for v in tf.trainable_variables() if v.name.split('/')[0] in train_layers]
@@ -169,13 +172,6 @@ def main(_):
                                         reduction=tf.losses.Reduction.NONE)
             loss = tf.square(loss)
         loss = tf.reduce_mean(loss)
-
-    if weight != 0:
-        label_embedding = model.get_label_embedding()
-        cross_corr = tf.matmul(tf.transpose(label_embedding), label_embedding)
-
-        corr = np.load(corr_path)
-        loss = loss - weight * tf.reduce_mean(tf.multiply(tf.reshape(cross_corr, [-1]), tf.reshape(corr, [-1])))
 
     # Train op
     with tf.name_scope("train"):

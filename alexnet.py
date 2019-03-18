@@ -28,8 +28,7 @@ import numpy as np
 class AlexNet(object):
     """Implementation of the AlexNet."""
 
-    def __init__(self, x, keep_prob, num_classes, emb_dim, skip_layers,
-                 exp = 1.0, weights_path='DEFAULT'):
+    def __init__(self, x, keep_prob, exp, num_classes, emb_dim, skip_layers, c=0.005, nel = 0, weights_path='DEFAULT'):
         """Create the graph of the AlexNet model.
 
         Args:
@@ -48,6 +47,8 @@ class AlexNet(object):
         self.EMB_DIM = emb_dim
         self.SKIP_LAYERS = skip_layers
         self.EXP = exp
+        self.C = c
+        self.NEL = nel
 
         if weights_path == 'DEFAULT':
             self.WEIGHTS_PATH = 'bvlc_alexnet.npy'
@@ -59,26 +60,24 @@ class AlexNet(object):
 
     def create(self):
         """Create the network graph."""
-        # First five layers have been skipped
-       
-        if len(self.SKIP_LAYERS) == 3:
-            mid_layer_dim = self.EMB_DIM
-        else:
-            mid_layer_dim = 4096
+        mid_layer_dim = self.EMB_DIM
 
         # 6th Layer: Flatten -> FC (w ReLu) -> Dropout
         fc6 = fc(self.X, 6*6*256, mid_layer_dim, name='fc6')
+        if self.NEL >= 3:
+            fc6 = eexponentiation(fc6, self.EXP, self.C)
         dropout6 = dropout(fc6, self.KEEP_PROB)
 
         # 7th Layer: FC (w ReLu) -> Dropout
         fc7 = fc(dropout6, mid_layer_dim, self.EMB_DIM, name='fc7')
-        if self.EXP != 1:
-            sign7 = tf.sign(fc7)
-            fc7 = tf.multiply(sign7, tf.pow(tf.abs(fc7), self.EXP))
+        if self.NEL >= 2:
+            fc7 = eexponentiation(fc7, self.EXP, self.C)
         dropout7 = dropout(fc7, self.KEEP_PROB)
 
         # 8th Layer: FC and return unscaled activations
         self.fc8 = fc(dropout7, self.EMB_DIM, self.NUM_CLASSES, relu=False, name='fc8')
+        if self.NEL >= 1:
+            self.fc8 = eexponentiation(self.fc8, self.EXP, self.C)
 
     def load_initial_weights(self, session):
         """Load weights from file into network.
@@ -223,3 +222,18 @@ def lrn(x, radius, alpha, beta, name, bias=1.0):
 def dropout(x, keep_prob):
     """Create a dropout layer."""
     return tf.nn.dropout(x, keep_prob)
+
+
+def eexponentiation(x, e, c):
+    ndims = len(x.get_shape().as_list())
+    exp = tf.tile(tf.reshape(e, [-1]+[1]*(ndims-1)), 
+                  tf.slice(tf.shape(tf.expand_dims(x, 1)), [1], [ndims]))
+    if c > 0.0:
+        ly = tf.pow(tf.maximum(c, tf.abs(x)), exp) - tf.pow(c, exp)
+        sy = tf.minimum(c, tf.abs(x)) * tf.pow(c, exp-1)
+        output = tf.multiply(tf.sign(x), ly+sy)
+    else:
+        output = tf.multiply(tf.sign(x), tf.pow(tf.abs(x), exp))
+    return output
+
+

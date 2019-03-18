@@ -13,7 +13,7 @@ def f2s(f):
 
 
 def parse_results(filename):
-    print(filename)
+    #print(filename)
     lines = open(filename).readlines()
     lines = [l.strip() for l in lines if l.strip() != ""]
 
@@ -54,26 +54,30 @@ if __name__ == '__main__':
     DIS_STEP=5
     NUM_CLASSES=1000
 
-    LFUNC='logistic'
+    LFUNC='softmax'
     NUM_EPOCHS=400
     BSIZE=128
 
     NUM_TR_LAYERS_LIST=[3]
-    EXP_LIST=[0.75, 1.0, 1.3, 1.5]
-    WGT_LIST=[0.001, 0.1]
+    EXP_LIST=[0.6]
+    C_LIST = [0.001, 0.005, 0.01]
+    NEL_LIST = [2]
+    WGT_LIST=[0, 0.1, 0.2]
     KEEP_PROB_LIST=[1.0]
-    LEARNING_RATE_LIST=[0.000001, 0.00001, 0.0001]
+    LEARNING_RATE_LIST=[0.0001]
 
     for NTR_LAYERS in NUM_TR_LAYERS_LIST:
+      for NEL in NEL_LIST:
         for EX in EXP_LIST:
+          for C in C_LIST:
+            print('Num layers: '+str(NTR_LAYERS)+'  Nel: '+str(NEL)+'  Exp: '+str(EX)+'  C: '+str(C))
             for WGT in WGT_LIST:
-                for KPROB in KEEP_PROB_LIST:
-                    for LR in LEARNING_RATE_LIST:
-                        print('Num layers: '+str(NTR_LAYERS)+'  Exp: '+str(EX)+'  Wgt: '+str(WGT)+'  Keep prob: '+str(KPROB)+'  L rate: '+str(LR))
-                        OUT='IMGNET_EMB'+str(EDIM)+'_NLAYERS'+str(NTR_LAYERS)+'_LFUNC'+LFUNC+'_KPROB'+str(KPROB)+'_EXP'+str(EX)+'_WGT'+str(WGT)+'_LR'+str(LR)+'_BS'+str(BSIZE)
-                        filename = os.path.join(folder, OUT)
-                        parse_results(filename)
+              for KPROB in KEEP_PROB_LIST:
+                for LR in LEARNING_RATE_LIST:
+                  OUT='DAC_EMB'+str(EDIM)+'_NLAYERS'+str(NTR_LAYERS)+'_LFUNC'+LFUNC+'_KPROB'+str(KPROB)+'_EXP'+str(EX)+'_C'+str(C)+'_NEL'+str(NEL)+'_WGT'+str(WGT)+'_LR'+str(LR)+'_BS'+str(BSIZE)
+                  filename = os.path.join(folder, OUT)
+                  parse_results(filename)
                 print('')
-                print('')
-                print('')
-                print('')
+              print('')
+            print('')
+            print('')
