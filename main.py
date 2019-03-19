@@ -38,7 +38,8 @@ flags.DEFINE_integer("num_train_layers", 1,
                      "The number of layers (from the last) to be fine tuned during train")
 
 flags.DEFINE_string("loss_func", "logistic",
-                    "Loss function to be used for optimization. Can be one of ['mse', 'logistic', 'l2hinge', 'softmax']")
+                    "Loss function to be used for optimization. Can be one of \
+                    ['mse', 'logistic', 'l2hinge', 'softmax', 'hinge', 'sigmoid', 'boot_soft', 'boot_hard', 'ramp']")
 flags.DEFINE_float("keep_prob", 1.0,
                    "Keep probability to be used for dropout")
 flags.DEFINE_float("exp", 1.0,
@@ -55,6 +56,8 @@ flags.DEFINE_integer("num_epochs", 10,
                      "Tolal number of epochs")
 flags.DEFINE_integer("batch_size", 128,
                      "Batch size for training")
+flags.DEFINE_float("beta", 0.8,
+                     "The value of beta to be used in boot_soft and boot_hard loss functions")
 
 FLAGS=flags.FLAGS
 
@@ -128,6 +131,7 @@ def main(_):
     filewriter_path = FLAGS.filewriter_path
     display_step = FLAGS.display_step
     max_threads = FLAGS.max_threads
+    beta = FLAGS.beta
 
     # Create parent path if it doesn't exist
     '''
@@ -171,6 +175,26 @@ def main(_):
                                         logits=score,
                                         reduction=tf.losses.Reduction.NONE)
             loss = tf.square(loss)
+        elif loss_func == 'hinge':
+            loss = tf.losses.hinge_loss(labels=y,
+                                        logits=score,
+                                        reduction=tf.losses.Reduction.NONE)
+        elif loss_func == 'boot_soft':
+            bs_y = (beta * y + (1.0 - beta) * score)
+            loss = tf.nn.softmax_cross_entropy_with_logits(logits=score,
+                                                           labels=bs_y,
+                                                           name='bs_softmax_loss')
+        elif loss_func == 'boot_hard':
+            pred_y = tf.one_hot(tf.argmax(score, 1), tf.shape(y)[1])
+            bh_y = (beta * y + (1.0 - beta) * pred_y)
+            loss = tf.nn.softmax_cross_entropy_with_logits(logits=score,
+                                                           labels=bh_y,
+                                                           name='bs_softmax_loss')
+        elif loss_func == 'sigmoid':
+            loss = tf.sigmoid(-tf.multiply(y, score))
+        elif loss_func == 'ramp':
+            loss = tf.minimum(1.0, tf.maximum(0.0, 1.0 - y * score))
+            
         loss = tf.reduce_mean(loss)
 
     # Train op
