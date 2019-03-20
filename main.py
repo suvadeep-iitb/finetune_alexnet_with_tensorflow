@@ -147,14 +147,12 @@ def main(_):
     kp = tf.placeholder(tf.float32)
 
     # Initialize model
-    layer_names = ['fc6', 'fc7', 'fc8']
-    train_layers = layer_names[-FLAGS.num_train_layers:]
-    model = AlexNet(x, kp, exp, num_classes, emb_dim, train_layers, c, nel)
+    model = AlexNet(x, kp, exp, num_classes, emb_dim, c, nel)
 
     # Link variable to model output
-    score = model.fc8
+    score = model.fc9
 
-    # List of trainable variables of the layers we want to train
+    train_layers = ['fc6', 'fc7', 'fc8', 'fc9']
     var_list = [v for v in tf.trainable_variables() if v.name.split('/')[0] in train_layers]
 
     # Op for calculating the loss
@@ -268,9 +266,6 @@ def main(_):
 
         # Add the model graph to TensorBoard
         #writer.add_graph(sess.graph)
-
-        # Load the pretrained weights into the non-trainable layer
-        model.load_initial_weights(sess)
 
         log_buff += "{} Start training...".format(datetime.now())+'\n'
         #print("{} Open Tensorboard at --logdir {}".format(datetime.now(),

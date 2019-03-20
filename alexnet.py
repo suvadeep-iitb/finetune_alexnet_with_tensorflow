@@ -28,15 +28,13 @@ import numpy as np
 class AlexNet(object):
     """Implementation of the AlexNet."""
 
-    def __init__(self, x, keep_prob, exp, num_classes, emb_dim, skip_layers, c=0.005, nel = 0, weights_path='DEFAULT'):
+    def __init__(self, x, keep_prob, exp, num_classes, emb_dim, c=0.005, nel = 0):
         """Create the graph of the AlexNet model.
 
         Args:
             x: Placeholder for the input tensor.
             keep_prob: Dropout probability.
             num_classes: Number of classes in the dataset.
-            skip_layer: List of names of the layer, that get trained from
-                scratch
             weights_path: Complete path to the pretrained weight file, if it
                 isn't in the same folder as this code
         """
@@ -45,81 +43,34 @@ class AlexNet(object):
         self.NUM_CLASSES = num_classes
         self.KEEP_PROB = keep_prob
         self.EMB_DIM = emb_dim
-        self.SKIP_LAYERS = skip_layers
         self.EXP = exp
         self.C = c
         self.NEL = nel
-
-        if weights_path == 'DEFAULT':
-            self.WEIGHTS_PATH = 'bvlc_alexnet.npy'
-        else:
-            self.WEIGHTS_PATH = weights_path
 
         # Call the create function to build the computational graph of AlexNet
         self.create()
 
     def create(self):
         """Create the network graph."""
-        mid_layer_dim = self.EMB_DIM
 
-        # 6th Layer: Flatten -> FC (w ReLu) -> Dropout
-        fc6 = fc(self.X, 6*6*256, mid_layer_dim, name='fc6')
-        if self.NEL >= 3:
+        fc6 = fc(self.X, 6*6*256, self.EMB_DIM, name='fc6')
+        if self.NEL >= 4:
             fc6 = eexponentiation(fc6, self.EXP, self.C)
         dropout6 = dropout(fc6, self.KEEP_PROB)
 
-        # 7th Layer: FC (w ReLu) -> Dropout
-        fc7 = fc(dropout6, mid_layer_dim, self.EMB_DIM, name='fc7')
-        if self.NEL >= 2:
+        fc7 = fc(dropout6, self.EMB_DIM, self.EMB_DIM, name='fc7')
+        if self.NEL >= 3:
             fc7 = eexponentiation(fc7, self.EXP, self.C)
         dropout7 = dropout(fc7, self.KEEP_PROB)
 
-        # 8th Layer: FC and return unscaled activations
-        self.fc8 = fc(dropout7, self.EMB_DIM, self.NUM_CLASSES, relu=False, name='fc8')
+        fc8 = fc(dropout7, self.EMB_DIM, self.EMB_DIM, name='fc8')
+        if self.NEL >= 2:
+            fc8 = eexponentiation(fc8, self.EXP, self.C)
+        dropout8 = dropout(fc8, self.KEEP_PROB)
+
+        self.fc9 = fc(dropout8, self.EMB_DIM, self.NUM_CLASSES, relu=False, name='fc9')
         if self.NEL >= 1:
-            self.fc8 = eexponentiation(self.fc8, self.EXP, self.C)
-
-    def load_initial_weights(self, session):
-        """Load weights from file into network.
-
-        As the weights from http://www.cs.toronto.edu/~guerzhoy/tf_alexnet/
-        come as a dict of lists (e.g. weights['conv1'] is a list) and not as
-        dict of dicts (e.g. weights['conv1'] is a dict with keys 'weights' &
-        'biases') we need a special load function
-        """
-        # Load the weights into memory
-        weights_dict = np.load(self.WEIGHTS_PATH, encoding='bytes').item()
-
-        # Add first 5 layers into the skip layer list
-        skip_layers = self.SKIP_LAYERS + ['conv1', 'conv2', 'conv3', 'conv4', 'conv5']
-
-        # Loop over all layer names stored in the weights dict
-        for op_name in weights_dict:
-
-            # Check if layer should be trained from scratch
-            if op_name not in skip_layers:
-
-                with tf.variable_scope(op_name, reuse=True):
-
-                    # Assign weights/biases to their corresponding tf variable
-                    for data in weights_dict[op_name]:
-
-                        # Biases
-                        if len(data.shape) == 1:
-                            var = tf.get_variable('biases', trainable=False)
-                            session.run(var.assign(data))
-
-                        # Weights
-                        else:
-                            var = tf.get_variable('weights', trainable=False)
-                            session.run(var.assign(data))
-
-
-    def get_label_embedding(self):
-        with tf.variable_scope('fc8', reuse=True):
-            weights = tf.get_variable('weights')
-            biases = tf.get_variable('biases')
-        return tf.concat([weights, tf.reshape(biases, [1, -1])], axis = 0)
+            self.fc9 = eexponentiation(self.fc9, self.EXP, self.C)
 
 
 def conv(x, filter_height, filter_width, num_filters, stride_y, stride_x, name,
@@ -185,23 +136,6 @@ def fc(x, num_in, num_out, name, relu=True):
         return relu
     else:
         return act
-
-
-def fc_tanh(x, num_in, num_out, name):
-    """Create a fully connected layer."""
-    with tf.variable_scope(name) as scope:
-
-        # Create tf variables for the weights and biases
-        weights = tf.get_variable('weights', shape=[num_in, num_out],
-                                  trainable=True)
-        biases = tf.get_variable('biases', [num_out], trainable=True)
-
-        # Matrix multiply weights and inputs and add bias
-        act = tf.nn.xw_plus_b(x, weights, biases, name=scope.name)
-
-    # Apply tanh non linearity
-    tanh = tf.nn.tanh(act)
-    return tanh
 
 
 def max_pool(x, filter_height, filter_width, stride_y, stride_x, name,
