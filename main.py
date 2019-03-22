@@ -180,22 +180,29 @@ def main(_):
                                         logits=score,
                                         reduction=tf.losses.Reduction.NONE)
         elif loss_func == 'boot_soft':
-            bs_y = (beta * y + (1.0 - beta) * score)
+            sm_score = tf.nn.softmax(score)
+            bs_y = (beta * y + (1.0 - beta) * sm_score)
             loss = tf.nn.softmax_cross_entropy_with_logits(logits=score,
-                                                           labels=bs_y,
-                                                           name='bs_softmax_loss')
+                                                           labels=bs_y)
         elif loss_func == 'boot_hard':
             pred_y = tf.one_hot(tf.argmax(score, 1), tf.shape(y)[1])
             bh_y = (beta * y + (1.0 - beta) * pred_y)
             loss = tf.nn.softmax_cross_entropy_with_logits(logits=score,
-                                                           labels=bh_y,
-                                                           name='bs_softmax_loss')
+                                                           labels=bh_y)
         elif loss_func == 'sigmoid':
-            loss = tf.sigmoid(-tf.multiply(y, score))
+            beta = 1.0
+            y_signed = 2.0*y - 1.0
+            score = tf.layers.batch_normalization(score, axis=1)
+            loss = tf.sigmoid(-beta*tf.multiply(y_signed, score))
         elif loss_func == 'ramp':
-            loss = tf.minimum(1.0, tf.maximum(0.0, 1.0 - y * score))
+            beta = 1.0
+            y_signed = 2.0*y - 1.0
+            score = tf.layers.batch_normalization(score, axis=1)
+            loss = tf.minimum(1.0, tf.maximum(0.0, 1.0 - beta * y_signed * score))
             
         loss = tf.reduce_mean(loss)
+        absmean = tf.reduce_mean(tf.abs(y*score))
+        mean, var = (tf.nn.moments(y*score, axes=[0]))
 
     # Train op
     with tf.name_scope("train"):
@@ -270,7 +277,7 @@ def main(_):
         #writer.add_graph(sess.graph)
 
         # Load the pretrained weights into the non-trainable layer
-        model.load_initial_weights(sess)
+        #model.load_initial_weights(sess)
 
         log_buff += "{} Start training...".format(datetime.now())+'\n'
         #print("{} Open Tensorboard at --logdir {}".format(datetime.now(),
@@ -296,6 +303,10 @@ def main(_):
             cost = 0.0
             load_time = 0
             train_time = 0
+
+            tmn = 0.0
+            tabsmn = 0.0
+            tva = 0.0
             for step in range(tr_batches_per_epoch):
 
                 # get next batch of data
@@ -305,11 +316,15 @@ def main(_):
 
                 # And run the training op
                 start_time = time.time()
-                _, lss = sess.run((train_op, loss), feed_dict={x: img_batch,
+                _, lss, mn, absmn, va = sess.run((train_op, loss, mean, absmean, var), feed_dict={x: img_batch,
                                                                y: label_batch,
                                                                kp: keep_prob})
                 cost += lss
                 train_time += time.time() - start_time
+
+                tmn += np.mean(mn)
+                tabsmn += absmn
+                tva += np.mean(va)
 
                 # Generate summary with the current batch of data and write to file
                 '''
@@ -325,6 +340,11 @@ def main(_):
             cost /= tr_batches_per_epoch
             log_buff += 'Epoch: %d\tCost: %.6f\tElapsed Time: %.2f (%.2f / %.2f)' % \
                     (epoch+1, cost, elapsed_time, load_time, train_time) + '\n'
+
+            tmn /= tr_batches_per_epoch
+            tabsmn /= tr_batches_per_epoch
+            tva /= tr_batches_per_epoch
+            log_buff += 'Mean: %.4f\tAbsMean: %.4f\tSD: %.4f\n' % (tmn, tabsmn, np.sqrt(tva))
 
             # Test the model on the sampled train set
             tr_top1 = ResultStruct()

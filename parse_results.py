@@ -40,10 +40,11 @@ def parse_results(filename):
     tes_acc1 = float(lines[max_idx+1].split()[6])
     tes_acc5 = float(lines[max_idx+2].split()[6])
     #print(comm_str)
-    print("Acc 1: %.4f / %.4f     Acc 5: %.4f / %.4f    Epoch: %d / %d" \
-           % (val_acc1, tes_acc1, val_acc5, tes_acc5, max_epoch, last_epoch))
+    #print("Acc 1: %.4f / %.4f     Acc 5: %.4f / %.4f    Epoch: %d / %d" \
+    #       % (val_acc1, tes_acc1, val_acc5, tes_acc5, max_epoch, last_epoch))
     #print(lines[max_idx+2])
-    print("")
+    #print("")
+    return (val_acc1, val_acc5, tes_acc1, tes_acc5, max_epoch)
 
 
 if __name__ == '__main__':
@@ -54,30 +55,52 @@ if __name__ == '__main__':
     DIS_STEP=5
     NUM_CLASSES=1000
 
-    LFUNC='softmax'
+    LFUNC='boot_hard'
     NUM_EPOCHS=400
     BSIZE=128
 
     NUM_TR_LAYERS_LIST=[3]
-    EXP_LIST=[0.6]
-    C_LIST = [0.001, 0.005, 0.01]
-    NEL_LIST = [2]
-    WGT_LIST=[0, 0.1, 0.2]
-    KEEP_PROB_LIST=[1.0]
-    LEARNING_RATE_LIST=[0.0001]
+    EXP_LIST=[1.0]
+    BETA_LIST=[0.6, 0.7, 0.8, 0.9, 1.0]
+    C_LIST = [0.01]
+    NEL_LIST = [1]
+    WGT_LIST=[0]
+    KEEP_PROB_LIST=[0.75, 1.0]
+    LEARNING_RATE_LIST=[0.00001, 0.0001, 0.001]
 
     for NTR_LAYERS in NUM_TR_LAYERS_LIST:
       for NEL in NEL_LIST:
+        print('Num layers: '+str(NTR_LAYERS)+'  Nel: '+str(NEL))
         for EX in EXP_LIST:
           for C in C_LIST:
-            print('Num layers: '+str(NTR_LAYERS)+'  Nel: '+str(NEL)+'  Exp: '+str(EX)+'  C: '+str(C))
             for WGT in WGT_LIST:
-              for KPROB in KEEP_PROB_LIST:
-                for LR in LEARNING_RATE_LIST:
-                  OUT='DAC_EMB'+str(EDIM)+'_NLAYERS'+str(NTR_LAYERS)+'_LFUNC'+LFUNC+'_KPROB'+str(KPROB)+'_EXP'+str(EX)+'_C'+str(C)+'_NEL'+str(NEL)+'_WGT'+str(WGT)+'_LR'+str(LR)+'_BS'+str(BSIZE)
-                  filename = os.path.join(folder, OUT)
-                  parse_results(filename)
-                print('')
-              print('')
-            print('')
-            print('')
+              max_val_acc1 = -1
+              max_val_acc5 = -1 
+              max_tes_acc1 = -1 
+              max_tes_acc5 = -1
+              max_kp = -1
+              max_lr = -1
+              max_be = -1
+              for BETA in BETA_LIST:
+                for KPROB in KEEP_PROB_LIST:
+                  #print('KP: '+str(KPROB))
+                  for LR in LEARNING_RATE_LIST:
+                    OUT='DAC_EMB'+str(EDIM)+'_NLAYERS'+str(NTR_LAYERS)+'_LFUNC'+LFUNC+'_KPROB'+str(KPROB)+'_EXP'+str(EX)+'_BETA'+str(BETA)+'_C'+str(C)+'_NEL'+str(NEL)+'_WGT'+str(WGT)+'_LR'+str(LR)+'_BS'+str(BSIZE)
+                    filename = os.path.join(folder, OUT)
+                    val_acc1, val_acc5, tes_acc1, tes_acc5, me = parse_results(filename)
+                    print('BETA: '+str(BETA)+' K PROB: '+str(KPROB)+' LR: '+str(LR)+'\t'+str(val_acc1)+' / '+str(val_acc5)+'\t'+str(tes_acc1)+' / '+str(tes_acc5)+'\t'+str(me))
+                    if max_val_acc5 < val_acc5:
+                      max_val_acc1 = val_acc1
+                      max_val_acc5 = val_acc5
+                      max_tes_acc1 = tes_acc1
+                      max_tes_acc5 = tes_acc5
+                      max_kp = KPROB
+                      max_lr = LR
+                      max_be = BETA
+                  #print('')
+                #print('')
+              #print('')
+            print(str(max_val_acc1)+' / '+str(max_val_acc5)+'\t'+str(max_tes_acc1)+' / '+str(max_tes_acc5)+'\t'+str(max_be)+' / '+str(max_kp)+' / '+str(max_lr))
+            #print('')
+            #print('')
+        print('')

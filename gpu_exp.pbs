@@ -4,7 +4,7 @@
 #
 #PBS -N imagenet_gpu
 #PBS -l walltime=24:00:00
-#PBS -l select=2:ncpus=6:accelerator=True:vntype=cray_compute
+#PBS -l select=6:ncpus=6:accelerator=True:vntype=cray_compute
 #PBS -l place=scatter
 #PBS -q gpuq
 #PBS -j oe
@@ -24,14 +24,14 @@ module load craype-accel-nvidia60
 
 PARAM_FILE='params_file.csv'
 
-while IFS=, read -r TRAIN_PATHS VAL_PATHS TEST_PATHS CORR_PATH CHP_PATH FW_PATH MAX_THR DIS_STEP NUM_CLASSES LOSS_FUNC NUM_EPOCHS BATCH_SIZE NUM_TR_LAYERS EMB_DIM EXP C NEL WEIGHT KEEP_PROB LEARNING_RATE
+while IFS=, read -r TRAIN_PATHS VAL_PATHS TEST_PATHS CORR_PATH CHP_PATH FW_PATH MAX_THR DIS_STEP NUM_CLASSES LOSS_FUNC NUM_EPOCHS BATCH_SIZE NUM_TR_LAYERS EMB_DIM EXP BETA C NEL WEIGHT KEEP_PROB LEARNING_RATE
 do
     if [[ ${TRAIN_PATHS} != 'TRAIN_PATHS' ]];
     then
         LEARNING_RATE="${LEARNING_RATE//$'\r'/$''}"
-        OUTPUT='DAC_EMB'$EMB_DIM'_NLAYERS'$NUM_TR_LAYERS'_LFUNC'$LOSS_FUNC'_KPROB'$KEEP_PROB'_EXP'$EXP'_C'$C'_NEL'$NEL'_WGT'$WEIGHT'_LR'$LEARNING_RATE'_BS'$BATCH_SIZE
-        echo 'aprun -n 1 python main.py -train_paths='${TRAIN_PATHS}' -val_paths='$VAL_PATHS' -test_paths='${TEST_PATHS}' -corr_path='${CORR_PATH}' -checkpoint_path='${CHP_PATH}' -filewriter_path='${FW_PATH}' -max_threads='${MAX_THR}' -display_step='${DIS_STEP}' -num_classes='${NUM_CLASSES}' -embedding_dim='${EMB_DIM}' -num_train_layers='${NUM_TR_LAYERS}' -loss_func='${LOSS_FUNC}' -keep_prob='${KEEP_PROB}' -exp='${EXP}' -c='${C}' -nel='${nel}' -weight='${WEIGHT}' -learning_rate='${LEARNING_RATE}' -num_epochs='${NUM_EPOCHS}' -batch_size='${BATCH_SIZE} > ${OUTPUT}
-        aprun -n 1 python main.py -train_paths=${TRAIN_PATHS} -val_paths=${VAL_PATHS} -test_paths=${TEST_PATHS} -corr_path=${CORR_PATH} -checkpoint_path=${CHP_PATH} -filewriter_path=${FW_PATH} -max_threads=${MAX_THR} -display_step=${DIS_STEP} -num_classes=${NUM_CLASSES} -embedding_dim=${EMB_DIM} -num_train_layers=${NUM_TR_LAYERS} -loss_func=${LOSS_FUNC} -keep_prob=${KEEP_PROB} -exp=${EXP} -c=${C} -nel=${NEL} -weight=${WEIGHT} -learning_rate=${LEARNING_RATE} -num_epochs=${NUM_EPOCHS} -batch_size=${BATCH_SIZE} &>> ${OUTPUT} &
+        OUTPUT='DAC_EMB'$EMB_DIM'_NLAYERS'$NUM_TR_LAYERS'_LFUNC'$LOSS_FUNC'_KPROB'$KEEP_PROB'_EXP'$EXP'_BETA'$BETA'_C'$C'_NEL'$NEL'_WGT'$WEIGHT'_LR'$LEARNING_RATE'_BS'$BATCH_SIZE
+        echo 'aprun -n 1 python main.py -train_paths='${TRAIN_PATHS}' -val_paths='$VAL_PATHS' -test_paths='${TEST_PATHS}' -corr_path='${CORR_PATH}' -checkpoint_path='${CHP_PATH}' -filewriter_path='${FW_PATH}' -max_threads='${MAX_THR}' -display_step='${DIS_STEP}' -num_classes='${NUM_CLASSES}' -embedding_dim='${EMB_DIM}' -num_train_layers='${NUM_TR_LAYERS}' -loss_func='${LOSS_FUNC}' -keep_prob='${KEEP_PROB}' -exp='${EXP}' -beta='${BETA}' -c='${C}' -nel='${nel}' -weight='${WEIGHT}' -learning_rate='${LEARNING_RATE}' -num_epochs='${NUM_EPOCHS}' -batch_size='${BATCH_SIZE} > ${OUTPUT}
+        aprun -n 1 python main.py -train_paths=${TRAIN_PATHS} -val_paths=${VAL_PATHS} -test_paths=${TEST_PATHS} -corr_path=${CORR_PATH} -checkpoint_path=${CHP_PATH} -filewriter_path=${FW_PATH} -max_threads=${MAX_THR} -display_step=${DIS_STEP} -num_classes=${NUM_CLASSES} -embedding_dim=${EMB_DIM} -num_train_layers=${NUM_TR_LAYERS} -loss_func=${LOSS_FUNC} -keep_prob=${KEEP_PROB} -exp=${EXP} -beta=${BETA} -c=${C} -nel=${NEL} -weight=${WEIGHT} -learning_rate=${LEARNING_RATE} -num_epochs=${NUM_EPOCHS} -batch_size=${BATCH_SIZE} &>> ${OUTPUT} &
     fi
 done < ${PARAM_FILE}
 
