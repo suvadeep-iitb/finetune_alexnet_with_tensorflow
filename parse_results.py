@@ -55,13 +55,13 @@ if __name__ == '__main__':
     DIS_STEP=5
     NUM_CLASSES=1000
 
-    LFUNC='boot_hard'
+    LFUNC='boot_soft'
     NUM_EPOCHS=400
     BSIZE=128
 
     NUM_TR_LAYERS_LIST=[3]
     EXP_LIST=[1.0]
-    BETA_LIST=[0.6, 0.7, 0.8, 0.9, 1.0]
+    BETA_LIST=[0.2, 0.35, 0.5, 0.6, 0.75, 1.0]
     C_LIST = [0.01]
     NEL_LIST = [1]
     WGT_LIST=[0]
@@ -100,7 +100,7 @@ if __name__ == '__main__':
                   #print('')
                 #print('')
               #print('')
-            print(str(max_val_acc1)+' / '+str(max_val_acc5)+'\t'+str(max_tes_acc1)+' / '+str(max_tes_acc5)+'\t'+str(max_be)+' / '+str(max_kp)+' / '+str(max_lr))
+            print(str(max_val_acc1)+' / '+str(max_tes_acc1)+'\t'+str(max_val_acc5)+' / '+str(max_tes_acc5)+'\t'+str(max_be)+' / '+str(max_kp)+' / '+str(max_lr))
             #print('')
             #print('')
         print('')
