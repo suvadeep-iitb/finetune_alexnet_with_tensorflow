@@ -103,6 +103,35 @@ class ResultStruct:
         return rep_str
 
 
+def tensor_dump(model, data, batch_size):
+    data.shuffle()
+    batches_per_epoch = min(data.data_size // batch_size, 50)
+    econv3 = []
+    conv4 = []
+    econv4 = []
+    efc7 = []
+    fc8 = []
+    efc8 = []
+    for _ in range(batches_per_epoch):
+        img_batch, label_batch = data.next_batch()
+        ec3, co4, ec4, ef7, f8, ef8 = sess.run((model.econv3, model.conv4, model.econv4
+                                                model.efc7, model.fc8, model.efc8), \
+                                               feed_dict={x: img_batch, \
+                                                          y: label_batch, \
+                                                          kp: 1.0})
+        econv3.append(ec3)
+        conv4.append(co4)
+        econv4.append(ec4)
+        efc7.append(efc7)
+        fc8.append(fc8)
+        efc8.append(ef8)
+    econv3 = np.concatenate(econv3, axis=0)
+    conv4  = np.concatenate(conv4, axis=0)
+    econv4 = np.concatenate(econv4. axis=0)
+    efc7   = np.concatenate(efc7, axis=0)
+    fc8    = np.concatenate(fc8, axis=0)
+    efc8   = np.concatenate(efc8, axis=0)
+
 
 def main(_):
     if not FLAGS.train_paths:
@@ -152,7 +181,7 @@ def main(_):
     model = AlexNet(x, kp, exp, num_classes, emb_dim, train_layers, c, nel)
 
     # Link variable to model output
-    score = model.fc8
+    score = model.efc8
 
     # List of trainable variables of the layers we want to train
     var_list = [v for v in tf.trainable_variables() if v.name.split('/')[0] in train_layers]
