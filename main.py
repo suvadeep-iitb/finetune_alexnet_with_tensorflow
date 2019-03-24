@@ -2,6 +2,7 @@ import os, time, math
 
 import numpy as np
 import tensorflow as tf
+import pickle
 
 from alexnet import AlexNet
 from dataset import Dataset
@@ -103,7 +104,7 @@ class ResultStruct:
         return rep_str
 
 
-def tensor_dump(model, data, batch_size):
+def dump_tensor(sess, model, x, y, kp, data, batch_size, epoch, prefix):
     data.shuffle()
     batches_per_epoch = min(data.data_size // batch_size, 50)
     econv3 = []
@@ -112,9 +113,9 @@ def tensor_dump(model, data, batch_size):
     efc7 = []
     fc8 = []
     efc8 = []
-    for _ in range(batches_per_epoch):
+    for ep in range(batches_per_epoch):
         img_batch, label_batch = data.next_batch()
-        ec3, co4, ec4, ef7, f8, ef8 = sess.run((model.econv3, model.conv4, model.econv4
+        ec3, co4, ec4, ef7, f8, ef8 = sess.run((model.econv3, model.conv4, model.econv4, \
                                                 model.efc7, model.fc8, model.efc8), \
                                                feed_dict={x: img_batch, \
                                                           y: label_batch, \
@@ -122,15 +123,36 @@ def tensor_dump(model, data, batch_size):
         econv3.append(ec3)
         conv4.append(co4)
         econv4.append(ec4)
-        efc7.append(efc7)
-        fc8.append(fc8)
+        efc7.append(ef7)
+        fc8.append(f8)
         efc8.append(ef8)
+
     econv3 = np.concatenate(econv3, axis=0)
     conv4  = np.concatenate(conv4, axis=0)
-    econv4 = np.concatenate(econv4. axis=0)
+    econv4 = np.concatenate(econv4, axis=0)
     efc7   = np.concatenate(efc7, axis=0)
     fc8    = np.concatenate(fc8, axis=0)
     efc8   = np.concatenate(efc8, axis=0)
+
+    dirname = 'dac_emp%d_nlayers%d_lfunc%s_kprob%.2f_exp%.2f_beta%.2f_c%.2f_nel%d_wgt%.2f_lr%.2f_bs%d' % \
+               (FLAGS.embedding_dim, FLAGS.num_train_layers, FLAGS.loss_func, FLAGS.keep_prob, FLAGS.exp, \
+                FLAGS.beta, FLAGS.c, FLAGS.nel, FLAGS.weight, FLAGS.learning_rate, FLAGS.batch_size)
+    full_dir_path = os.path.join('imagenet_tensor_dump', dirname)
+    try:
+        os.mkdir(full_dir_path)
+        print('Directory ', full_dir_path, ' created.')
+    except FileExistsError:
+        pass
+
+    filename = '%s_ep%s.pkl' % (prefix, epoch)
+    full_file_path = os.path.join(full_dir_path, filename)
+    var_dict = {'econv3': econv3, 
+                'conv4' : conv4, 
+                'econv4': econv4,
+                'efc7'  : efc7,
+                'fc8'   : fc8,
+                'efc8'  : efc8}
+    pickle.dump(var_dict, open(full_file_path, 'wb'))
 
 
 def main(_):
@@ -469,7 +491,13 @@ def main(_):
             print(log_buff)
             log_buff = ''
 
+            if (epoch % 10 == 0):
+                dump_tensor(sess, model, x, y, kp, tr_data, batch_size, epoch+1, 'train')
+                dump_tensor(sess, model, x, y, kp, val_data, batch_size, epoch+1, 'valid')
+
         print(log_buff)
+        dump_tensor(sess, model, x, y, kp, tr_data, batch_size, num_epochs, 'train')
+        dump_tensor(sess, model, x, y, kp, val_data, batch_size, num_epochs, 'valid')
 
 
 if __name__ == "__main__":

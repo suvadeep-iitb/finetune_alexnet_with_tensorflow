@@ -79,6 +79,7 @@ class Dataset(object):
         np.random.set_state(rng_state)
         np.random.shuffle(index)
         self.labels = self.labels[index, :]
+        self.reset()
 
 
     def reset(self):
@@ -93,8 +94,8 @@ class Dataset(object):
             lbl_batch = self.labels[s_idx: e_idx, :].todense()
         else:
             e_idx = self.batch_size - s_idx
-            img_batch = np.concatenate(self.img_contents[s_idx:, :, :, :], self.img_contents[:e_idx, :, :, :], axis = 0)
-            lbl_batch = vstack(self.labels[s_idx:, :], self.labels[:e_idx, :]).todense()
+            img_batch = np.concatenate((self.img_contents[s_idx:, :, :, :], self.img_contents[:e_idx, :, :, :]), axis = 0)
+            lbl_batch = vstack((self.labels[s_idx:, :], self.labels[:e_idx, :])).todense()
         self.counter = e_idx
         return img_batch, lbl_batch
 
