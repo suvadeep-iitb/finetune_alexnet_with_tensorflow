@@ -28,8 +28,7 @@ import numpy as np
 class AlexNet(object):
     """Implementation of the AlexNet."""
 
-    def __init__(self, x, keep_prob, num_classes, emb_dim, skip_layers,
-                 weights_path='DEFAULT'):
+    def __init__(self, x, keep_prob, exp, num_classes, emb_dim, skip_layers, c, nel, weights_path='DEFAULT'):
         """Create the graph of the AlexNet model.
 
         Args:
@@ -45,8 +44,11 @@ class AlexNet(object):
         self.X = x
         self.NUM_CLASSES = num_classes
         self.KEEP_PROB = keep_prob
+        self.EXP = exp
         self.EMB_DIM = emb_dim
         self.SKIP_LAYERS = skip_layers
+        self.C = c
+        self.NEL = nel
 
         if weights_path == 'DEFAULT':
             self.WEIGHTS_PATH = 'bvlc_alexnet.npy'
@@ -58,27 +60,56 @@ class AlexNet(object):
 
     def create(self):
         """Create the network graph."""
+        if self.NEL == 7:
+            self.ex = eexponentiation(self.X, self.EXP, self.C)
+        else:
+            self.ex = self.X
+
         # 3rd Layer: Conv (w ReLu)
-        conv3 = conv(self.X, 3, 3, 384, 1, 1, name='conv3')
+        self.conv3 = conv(self.ex, 3, 3, 128, 1, 1, name='conv3')
+        if self.NEL == 6:
+            self.econv3 = eexponentiation(self.conv3, self.EXP, self.C)
+        else:
+            self.econv3 = self.conv3
 
         # 4th Layer: Conv (w ReLu) splitted into two groups
-        conv4 = conv(conv3, 3, 3, 384, 1, 1, groups=2, name='conv4')
+        self.conv4 = conv(self.econv3, 3, 3, 128, 1, 1, groups=2, name='conv4')
+        if self.NEL == 5:
+            self.econv4 = eexponentiation(self.conv4, self.EXP, self.C)
+        else:
+            self.econv4 = self.conv4
 
         # 5th Layer: Conv (w ReLu) -> Pool splitted into two groups
-        conv5 = conv(conv4, 3, 3, 256, 1, 1, groups=2, name='conv5')
+        self.conv5 = conv(self.econv4, 3, 3, 96, 1, 1, groups=2, name='conv5')
+        if self.NEL == 4:
+            self.econv5 = eexponentiation(self.conv5, self.EXP, self.C)
+        else:
+            self.econv5 = self.conv5
         pool5 = max_pool(conv5, 3, 3, 2, 2, padding='VALID', name='pool5')
 
         # 6th Layer: Flatten -> FC (w ReLu) -> Dropout
-        flattened = tf.reshape(pool5, [-1, 6*6*256])
-        fc6 = fc(flattened, 6*6*256, self.EMB_DIM, name='fc6')
-        dropout6 = dropout(fc6, self.KEEP_PROB)
+        flattened = tf.reshape(pool5, [-1, 6*6*96])
+        self.fc6 = fc(flattened, 6*6*96, self.EMB_DIM, name='fc6')
+        if self.NEL == 3:
+            self.efc6 = eexponentiation(self.fc6, self.EXP, self.C)
+        else:
+            self.efc6 = self.fc6
+        dropout6 = dropout(self.efc6, self.KEEP_PROB)
 
         # 7th Layer: FC (w ReLu) -> Dropout
-        fc7 = fc(dropout6, self.EMB_DIM, self.EMB_DIM, name='fc7')
-        dropout7 = dropout(fc7, self.KEEP_PROB)
+        self.fc7 = fc(dropout6, self.EMB_DIM, self.EMB_DIM, name='fc7')
+        if self.NEL == 2:
+            self.efc7 = eexponentiation(self.fc7, self.EXP, self.C)
+        else:
+            self.efc7 = self.fc7
+        dropout7 = dropout(self.efc7, self.KEEP_PROB)
 
         # 8th Layer: FC and return unscaled activations
         self.fc8 = fc(dropout7, self.EMB_DIM, self.NUM_CLASSES, relu=False, name='fc8')
+        if self.NEL == 1:
+            self.efc8 = eexponentiation(self.fc8, self.EXP, self.C)
+        else:
+            self.efc8 = self.fc8
 
     def load_initial_weights(self, session):
         """Load weights from file into network.
@@ -199,3 +230,19 @@ def lrn(x, radius, alpha, beta, name, bias=1.0):
 def dropout(x, keep_prob):
     """Create a dropout layer."""
     return tf.nn.dropout(x, keep_prob)
+
+
+def eexponentiation(x, e, c):
+    ndims = len(x.get_shape().as_list())
+    exp = tf.tile(tf.reshape(e, [-1]+[1]*(ndims-1)), 
+                  tf.slice(tf.shape(tf.expand_dims(x, 1)), [1], [ndims]))
+    if c > 0.0:
+        ly = tf.pow(tf.maximum(c, tf.abs(x)), exp) - tf.pow(c, exp)
+        sy = tf.minimum(c, tf.abs(x)) * tf.pow(c, exp-1)
+        output = tf.multiply(tf.sign(x), ly+sy)
+    else:
+        output = tf.multiply(tf.sign(x), tf.pow(tf.abs(x), exp))
+    return output
+
+
+

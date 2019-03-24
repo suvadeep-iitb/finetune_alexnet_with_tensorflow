@@ -19,6 +19,8 @@ flags.DEFINE_string("val_paths", None,
                     "File storing the paths of the validation images")
 flags.DEFINE_string("test_paths", None,
                     "File storing the paths of the test images")
+flags.DEFINE_string("corr_path", None,
+                    "File containing label correlations")
 flags.DEFINE_string("checkpoint_path", None,
                     "Directory to save the checkpoints")
 flags.DEFINE_string("filewriter_path", None,
@@ -36,17 +38,26 @@ flags.DEFINE_integer("num_train_layers", 1,
                      "The number of layers (from the last) to be fine tuned during train")
 
 flags.DEFINE_string("loss_func", "logistic",
-                    "Loss function to be used for optimization. Can be one of ['mse', 'logistic', 'l2hinge', 'softmax']")
+                    "Loss function to be used for optimization. Can be one of \
+                    ['mse', 'logistic', 'l2hinge', 'softmax', 'hinge', 'sigmoid', 'boot_soft', 'boot_hard', 'ramp']")
 flags.DEFINE_float("keep_prob", 1.0,
                    "Keep probability to be used for dropout")
 flags.DEFINE_float("exp", 1.0,
                    "exponent to be used element-wise power operations on the logits")
+flags.DEFINE_float("c", 0.005,
+                   "cutoff to be used in eexponentiation")
+flags.DEFINE_integer("nel", 0,
+                     "number of eexponentiation layer to be inserted")
+flags.DEFINE_float("weight", 0.0,
+                   "weight for the label correlations in loss function")
 flags.DEFINE_float("learning_rate", 0.01,
                    "Initial learning rate")
 flags.DEFINE_integer("num_epochs", 10,
                      "Tolal number of epochs")
 flags.DEFINE_integer("batch_size", 128,
                      "Batch size for training")
+flags.DEFINE_float("beta", 0.8,
+                     "The value of beta to be used in boot_soft and boot_hard loss functions")
 
 FLAGS=flags.FLAGS
 
@@ -104,18 +115,23 @@ def main(_):
     train_paths = FLAGS.train_paths
     val_paths = FLAGS.val_paths
     test_paths = FLAGS.test_paths
+    corr_path = FLAGS.corr_path
     batch_size = FLAGS.batch_size
     num_classes = FLAGS.num_classes
     num_epochs = FLAGS.num_epochs
     emb_dim = FLAGS.embedding_dim
     keep_prob = FLAGS.keep_prob
     exp = FLAGS.exp
+    c = FLAGS.c
+    nel = FLAGS.nel
+    weight = FLAGS.weight
     loss_func = FLAGS.loss_func
     learning_rate = FLAGS.learning_rate
     checkpoint_path = FLAGS.checkpoint_path
     filewriter_path = FLAGS.filewriter_path
     display_step = FLAGS.display_step
     max_threads = FLAGS.max_threads
+    beta = FLAGS.beta
 
     # Create parent path if it doesn't exist
     '''
@@ -133,13 +149,10 @@ def main(_):
     # Initialize model
     layer_names = ['conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']
     train_layers = layer_names[-FLAGS.num_train_layers:]
-    model = AlexNet(x, kp, num_classes, emb_dim, train_layers)
+    model = AlexNet(x, kp, exp, num_classes, emb_dim, train_layers, c, nel)
 
     # Link variable to model output
     score = model.fc8
-    if exp != 1.0:
-        sign = tf.sign(score)
-        score = tf.multiply(sign, tf.pow(tf.abs(score), exp))
 
     # List of trainable variables of the layers we want to train
     var_list = [v for v in tf.trainable_variables() if v.name.split('/')[0] in train_layers]
@@ -149,11 +162,11 @@ def main(_):
         if loss_func == 'softmax':
             loss = tf.nn.softmax_cross_entropy_with_logits(logits=score,
                                                            labels=y,
-                                                           name='softmax_loss')
+                                                           name='softmax_loss_1')
         elif loss_func == 'logistic':
             loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=y,
                                                            logits=score,
-                                                           name='logistic_loss')
+                                                           name='logistic_loss_1')
         elif loss_func == 'mse':
             loss = tf.losses.mean_squared_error(labels=y,
                                                 predictions=score)
@@ -162,7 +175,34 @@ def main(_):
                                         logits=score,
                                         reduction=tf.losses.Reduction.NONE)
             loss = tf.square(loss)
+        elif loss_func == 'hinge':
+            loss = tf.losses.hinge_loss(labels=y,
+                                        logits=score,
+                                        reduction=tf.losses.Reduction.NONE)
+        elif loss_func == 'boot_soft':
+            sm_score = tf.nn.softmax(score)
+            bs_y = (beta * y + (1.0 - beta) * sm_score)
+            loss = tf.nn.softmax_cross_entropy_with_logits(logits=score,
+                                                           labels=bs_y)
+        elif loss_func == 'boot_hard':
+            pred_y = tf.one_hot(tf.argmax(score, 1), tf.shape(y)[1])
+            bh_y = (beta * y + (1.0 - beta) * pred_y)
+            loss = tf.nn.softmax_cross_entropy_with_logits(logits=score,
+                                                           labels=bh_y)
+        elif loss_func == 'sigmoid':
+            beta = 1.0
+            y_signed = 2.0*y - 1.0
+            score = tf.layers.batch_normalization(score, axis=1)
+            loss = tf.sigmoid(-beta*tf.multiply(y_signed, score))
+        elif loss_func == 'ramp':
+            beta = 1.0
+            y_signed = 2.0*y - 1.0
+            score = tf.layers.batch_normalization(score, axis=1)
+            loss = tf.minimum(1.0, tf.maximum(0.0, 1.0 - beta * y_signed * score))
+            
         loss = tf.reduce_mean(loss)
+        absmean = tf.reduce_mean(tf.abs(y*score))
+        mean, var = (tf.nn.moments(y*score, axes=[0]))
 
     # Train op
     with tf.name_scope("train"):
@@ -194,11 +234,8 @@ def main(_):
     log_buff = 'Data loading time: %.2f' % load_time + '\n'
 
     # Ops for evaluation
-    acc_split_weights_all = tr_data.get_acc_split_weights(caffe_class_ids, 0)
-    acc_split_weights_all = tf.convert_to_tensor(acc_split_weights_all, tf.float32)
-
-    acc_split_weights_1000 = tr_data.get_acc_split_weights(caffe_class_ids, 1000)
-    acc_split_weights_1000 = tf.convert_to_tensor(acc_split_weights_1000, tf.float32)
+    acc_split_weights = tr_data.get_acc_split_weights(caffe_class_ids, 0)
+    acc_split_weights = tf.convert_to_tensor(acc_split_weights, tf.float32)
     with tf.name_scope('accuracy'):
         # ops for top 1 accuracies and their splitting
         top1_score, _ = tf.nn.top_k(score, 1)
@@ -206,21 +243,17 @@ def main(_):
         top1_thresolds_bc = tf.broadcast_to(top1_thresolds, score.shape)
         top1_y = tf.to_float(tf.math.greater_equal(score, top1_thresolds_bc))
         top1_correct_pred = tf.multiply(y, top1_y)
-        top1_precision_all = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights_all, \
-                                                       tf.transpose(top1_correct_pred)), axis = 1))
-        top1_precision_1000 = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights_1000, \
-                                                        tf.transpose(top1_correct_pred)), axis = 1))
+        top1_precision = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights, \
+                                                   tf.transpose(top1_correct_pred)), axis = 1))
 
         # ops for top 5 accuracies and their splitting
-        top5_score, _ = tf.nn.top_k(score, 5)
+        top5_score, _ = tf.nn.top_k(score, min(5, num_classes))
         top5_thresolds = tf.reduce_min(top5_score, axis = 1, keepdims = True)
         top5_thresolds_bc = tf.broadcast_to(top5_thresolds, score.shape)
         top5_y = tf.to_float(tf.math.greater_equal(score, top5_thresolds_bc))
         top5_correct_pred = tf.multiply(y, top5_y)
-        top5_precision_all = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights_all, \
-                                                       tf.transpose(top5_correct_pred)), axis = 1))/5.0
-        top5_precision_1000 = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights_1000, \
-                                                        tf.transpose(top5_correct_pred)), axis = 1))/5.0
+        top5_precision = tf.squeeze(tf.reduce_mean(tf.matmul(acc_split_weights, \
+                                                   tf.transpose(top5_correct_pred)), axis = 1))
 
     # Merge all summaries together
     merged_summary = tf.summary.merge_all()
@@ -244,7 +277,7 @@ def main(_):
         #writer.add_graph(sess.graph)
 
         # Load the pretrained weights into the non-trainable layer
-        model.load_initial_weights(sess)
+        #model.load_initial_weights(sess)
 
         log_buff += "{} Start training...".format(datetime.now())+'\n'
         #print("{} Open Tensorboard at --logdir {}".format(datetime.now(),
@@ -255,7 +288,7 @@ def main(_):
         log_buff = ''
 
         # Loop over number of epochs
-        prev_top5_acc = 0
+        prev_acc = 0
         counter = 0
         for epoch in range(num_epochs):
 
@@ -270,6 +303,10 @@ def main(_):
             cost = 0.0
             load_time = 0
             train_time = 0
+
+            tmn = 0.0
+            tabsmn = 0.0
+            tva = 0.0
             for step in range(tr_batches_per_epoch):
 
                 # get next batch of data
@@ -279,11 +316,15 @@ def main(_):
 
                 # And run the training op
                 start_time = time.time()
-                _, lss = sess.run((train_op, loss), feed_dict={x: img_batch,
+                _, lss, mn, absmn, va = sess.run((train_op, loss, mean, absmean, var), feed_dict={x: img_batch,
                                                                y: label_batch,
                                                                kp: keep_prob})
                 cost += lss
                 train_time += time.time() - start_time
+
+                tmn += np.mean(mn)
+                tabsmn += absmn
+                tva += np.mean(va)
 
                 # Generate summary with the current batch of data and write to file
                 '''
@@ -300,11 +341,14 @@ def main(_):
             log_buff += 'Epoch: %d\tCost: %.6f\tElapsed Time: %.2f (%.2f / %.2f)' % \
                     (epoch+1, cost, elapsed_time, load_time, train_time) + '\n'
 
+            tmn /= tr_batches_per_epoch
+            tabsmn /= tr_batches_per_epoch
+            tva /= tr_batches_per_epoch
+            log_buff += 'Mean: %.4f\tAbsMean: %.4f\tSD: %.4f\n' % (tmn, tabsmn, np.sqrt(tva))
+
             # Test the model on the sampled train set
-            tr_top1_all = ResultStruct()
-            tr_top1_1000 = ResultStruct()
-            tr_top5_all = ResultStruct()
-            tr_top5_1000 = ResultStruct()
+            tr_top1 = ResultStruct()
+            tr_top5 = ResultStruct()
             # Evaluate on a for a smaller number of batches of trainset
             tr_data.reset()
             start_time = time.time()
@@ -312,87 +356,59 @@ def main(_):
             for _ in range(num_batches):
 
                 img_batch, label_batch = tr_data.next_batch()
-                prec1_all, prec1_1000, prec5_all, prec5_1000 = \
-                        sess.run((top1_precision_all, top1_precision_1000, \
-                                  top5_precision_all, top5_precision_1000), \
+                prec1, prec5 = sess.run((top1_precision, top5_precision), \
                                                  feed_dict={x: img_batch, \
                                                             y: label_batch, \
                                                             kp: 1.0});
-                tr_top1_all.add(prec1_all)
-                tr_top1_1000.add(prec1_1000)
-                tr_top5_all.add(prec5_all)
-                tr_top5_1000.add(prec5_1000)
-            tr_top1_all.scaler_div(num_batches)
-            tr_top1_1000.scaler_div(num_batches)
-            tr_top5_all.scaler_div(num_batches)
-            tr_top5_1000.scaler_div(num_batches)
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 1 All  Acc: ' + str(tr_top1_all) + '\n'
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 1 1000 Acc: ' + str(tr_top1_1000) + '\n'
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 5 All  Acc: ' + str(tr_top5_all) + '\n'
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 5 1000 Acc: ' + str(tr_top5_1000) + '\n'
+                tr_top1.add(prec1)
+                tr_top5.add(prec5)
+            tr_top1.scaler_div(num_batches)
+            tr_top5.scaler_div(num_batches)
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 1 Acc: ' + str(tr_top1) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTrain Top 5 Acc: ' + str(tr_top5) + '\n'
             tr_pred_time = time.time() - start_time
 
             # Test the model on the entire validation set
-            val_top1_all = ResultStruct()
-            val_top1_1000 = ResultStruct()
-            val_top5_all = ResultStruct()
-            val_top5_1000 = ResultStruct()
+            val_top1 = ResultStruct()
+            val_top5 = ResultStruct()
             val_data.reset()
             val_batches_per_epoch = val_data.data_size // batch_size
             start_time = time.time()
             for _ in range(val_batches_per_epoch):
 
                 img_batch, label_batch = val_data.next_batch()
-                prec1_all, prec1_1000, prec5_all, prec5_1000 = \
-                        sess.run((top1_precision_all, top1_precision_1000, \
-                                  top5_precision_all, top5_precision_1000), \
+                prec1, prec5 = sess.run((top1_precision, top5_precision), \
                                                  feed_dict={x: img_batch, \
                                                             y: label_batch, \
                                                             kp: 1.0})
-                val_top1_all.add(prec1_all)
-                val_top1_1000.add(prec1_1000)
-                val_top5_all.add(prec5_all)
-                val_top5_1000.add(prec5_1000)
-            val_top1_all.scaler_div(val_batches_per_epoch)
-            val_top1_1000.scaler_div(val_batches_per_epoch)
-            val_top5_all.scaler_div(val_batches_per_epoch)
-            val_top5_1000.scaler_div(val_batches_per_epoch)
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 1 All  Acc: ' + str(val_top1_all) + '\n'
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 1 1000 ACC: ' + str(val_top1_1000) + '\n'
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 5 All  Acc: ' + str(val_top5_all) + '\n'
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 5 1000 Acc: ' + str(val_top5_1000) + '\n'
+                val_top1.add(prec1)
+                val_top5.add(prec5)
+            val_top1.scaler_div(val_batches_per_epoch)
+            val_top5.scaler_div(val_batches_per_epoch)
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 1 Acc: ' + str(val_top1) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tVal   Top 5 Acc: ' + str(val_top5) + '\n'
 
             val_pred_time = time.time() - start_time
 
             # Test the model on the entire test set
-            te_top1_all = ResultStruct()
-            te_top1_1000 = ResultStruct()
-            te_top5_all = ResultStruct()
-            te_top5_1000 = ResultStruct()
+            te_top1 = ResultStruct()
+            te_top5 = ResultStruct()
             te_data.reset()
             te_batches_per_epoch = te_data.data_size // batch_size
             start_time = time.time()
             for _ in range(te_batches_per_epoch):
 
                 img_batch, label_batch = te_data.next_batch()
-                prec1_all, prec1_1000, prec5_all, prec5_1000 = \
-                        sess.run((top1_precision_all, top1_precision_1000, \
-                                  top5_precision_all, top5_precision_1000), \
+                prec1, prec5 = sess.run((top1_precision, top5_precision), \
                                                  feed_dict={x: img_batch, \
                                                             y: label_batch, \
                                                             kp: 1.0});
-                te_top1_all.add(prec1_all)
-                te_top1_1000.add(prec1_1000)
-                te_top5_all.add(prec5_all)
-                te_top5_1000.add(prec5_1000)
-            te_top1_all.scaler_div(te_batches_per_epoch)
-            te_top1_1000.scaler_div(te_batches_per_epoch)
-            te_top5_all.scaler_div(te_batches_per_epoch)
-            te_top5_1000.scaler_div(te_batches_per_epoch)
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 1 All  Acc: ' + str(te_top1_all) + '\n'
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 1 1000 Acc: ' + str(te_top1_1000) + '\n'
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 5 All  Acc: ' + str(te_top5_all) + '\n'
-            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 5 1000 Acc: ' + str(te_top5_1000) + '\n'
+                te_top1.add(prec1)
+                te_top5.add(prec5)
+            te_top1.scaler_div(te_batches_per_epoch)
+            te_top5.scaler_div(te_batches_per_epoch)
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 1 Acc: ' + str(te_top1) + '\n'
+            log_buff += 'Epoch: ' + str(epoch+1) + '\tTest  Top 5 Acc: ' + str(te_top5) + '\n'
             te_pred_time = time.time() - start_time
 
             elapsed_time = tr_pred_time + val_pred_time + te_pred_time
@@ -401,11 +417,11 @@ def main(_):
 
             if math.isnan(cost):
                 break
-            cur_top5_acc = val_top5_all.acc
-            if cur_top5_acc - prev_top5_acc > 0.003:
+            cur_acc = val_top5.acc
+            if cur_acc - prev_acc > 0.003:
                 counter = 0
-                prev_top5_acc = cur_top5_acc
-            elif (cur_top5_acc - prev_top5_acc < -0.05) or (counter == 15):
+                prev_acc = cur_acc
+            elif (cur_acc - prev_acc < -0.5) or (counter == 15):
                 break
             else:
                 counter += 1
