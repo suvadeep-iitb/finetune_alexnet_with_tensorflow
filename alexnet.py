@@ -85,7 +85,7 @@ class AlexNet(object):
             self.econv5 = eexponentiation(self.conv5, self.EXP, self.C)
         else:
             self.econv5 = self.conv5
-        pool5 = max_pool(conv5, 3, 3, 2, 2, padding='VALID', name='pool5')
+        pool5 = max_pool(self.econv5, 3, 3, 2, 2, padding='VALID', name='pool5')
 
         # 6th Layer: Flatten -> FC (w ReLu) -> Dropout
         flattened = tf.reshape(pool5, [-1, 6*6*96])
